@@ -113,7 +113,6 @@ void FadeToPtr(unsigned char *PalPtr);
 void RegisterSounds(short *SoundIDs, LongWord Len);
 void InitResources(void);
 void KillResources(void);
-Boolean MountMapFileAbsolute(const char *FileName);
 Boolean MountMapFile(const char *FileName);
 void *LoadCompressed(Word RezNum, LongWord *Length);
 void *LoadCompressedShape(Word RezNum);

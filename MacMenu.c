@@ -2,6 +2,7 @@
 #include "WolfDef.h"
 #include "SDLWolf.h"
 #include <string.h>
+#include <ctype.h>
 
 typedef enum {
 	WS_NORMAL,
@@ -24,6 +25,7 @@ struct widget_t {
 typedef struct {
 	SDL_Surface *pic;
 	char *name;
+	char *path;
 } scenario_t;
 
 static LongWord MenuPosY = 0;
@@ -304,40 +306,47 @@ static widgetclass_t EmptyClass = { NULL, NULL };
 
 static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, const char *Name)
 {
-	char *Buf;
-	char TmpPath[strlen(Dir) + strlen(Name) + 1];
+	const char *NameStart;
+	char *NameBuf;
+	char *Path;
+	char *s;
 	RFILE *Rp;
 	scenario_t *Scenario;
+	char c;
 
-	Buf = SDL_strdup(Name);
-	if (!Buf) BailOut("Out of memory");
-	stpcpy(stpcpy(TmpPath, Dir), Name);
-	Rp = res_open(TmpPath, 0);
-	if (!Rp)
+	NameStart = Name;
+	while (*NameStart == '_' || isspace(*NameStart)) NameStart++;
+	NameBuf = SDL_strdup(NameStart);
+	if (!NameBuf) BailOut("Out of memory");
+	for (s = NameBuf; *s; s++) {
+		c = *s;
+		if (c == '.') {
+			*s = '\0';
+			break;
+		}
+		if (c == '_' || isspace(c))
+			*s = ' ';
+	}
+
+	Path = AllocSomeMem(strlen(Dir) + strlen(Name) + 1);
+	stpcpy(stpcpy(Path, Dir), Name);
+	Rp = res_open(Path, 0);
+	if (!Rp) {
+		SDL_free(NameBuf);
+		SDL_free(Path);
 		return SDL_ENUM_CONTINUE;
+	}
 
 	ScenarioCount++;
 	Scenarios = SDL_realloc(Scenarios, ScenarioCount * sizeof(scenario_t));
 	if (!Scenarios) BailOut("Out of memory");
 	Scenario = &Scenarios[ScenarioCount-1];
-	Scenario->pic = NULL;
-	Scenario->name = Buf;
+	Scenario->path = Path;
+	Scenario->name = NameBuf;
 	Scenario->pic = LoadPict(Rp, 1);
 
 	res_close(Rp);
 	return SDL_ENUM_CONTINUE;
-}
-
-static void DrawScenarioName(const char *Name)
-{
-	char c;
-	while (*Name == '_') Name++;
-	for (; *Name && *Name != '.'; Name++) {
-		c = *Name;
-		if (c == '_')
-			c = ' ';
-		DrawAChar(c);
-	}
 }
 
 static const Rect ScenarioListRect = {82, 14, 258, 339};
@@ -381,7 +390,7 @@ static void DrawScenarioList(void)
 	Max = Max < ScenarioCount ? Max : ScenarioCount;
 	for (i = MenuScrollY; i < Max; i++) {
 		SetFontXY(17, Y+1);
-		DrawScenarioName(Scenarios[i].name);
+		DrawAString(Scenarios[i].name);
 		Y += 16;
 	}
 	RenderWidgets(ScenarioWidgets, 2, -1, NULL);
@@ -398,6 +407,11 @@ static void DrawScenarioList(void)
 	EndUIOverlay();
 }
 
+static int CompareScenario(const void *a, const void *b)
+{
+	return SDL_strcasecmp(((scenario_t*)a)->name,((scenario_t*)b)->name);
+}
+
 Word ChooseScenario(void)
 {
 	int i;
@@ -409,6 +423,7 @@ Word ChooseScenario(void)
 	if (ScenarioPath) SDL_free(ScenarioPath);
 	ScenarioPath = NULL;
 	EnumerateLevels(MakeScenarioList, NULL);
+	qsort(Scenarios, ScenarioCount, sizeof(scenario_t), CompareScenario);
 	MenuPosY = ScenarioIndex >= ScenarioCount ? ScenarioCount - 1 : ScenarioIndex;
 	MenuScrollY = MenuPosY >= ScenariosItemHeight ? MenuPosY - ScenariosItemHeight + 1 : MenuPosY;
 	ResizeGameWindow(369, 331);
@@ -504,10 +519,11 @@ Word ChooseScenario(void)
 
 	if (Scenarios) {
 		for (i = 0; i < ScenarioCount; i++) {
+			SDL_free(Scenarios[i].name);
 			if (i == MenuPosY)
-				ScenarioPath = Scenarios[i].name;
+				ScenarioPath = Scenarios[i].path;
 			else
-				SDL_free(Scenarios[i].name);
+				SDL_free(Scenarios[i].path);
 			if (Scenarios[i].pic)
 				SDL_DestroySurface(Scenarios[i].pic);
 		}

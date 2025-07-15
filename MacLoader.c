@@ -71,12 +71,22 @@ void InitResources(void)
 	const char *BasePath;
 	if (MainResources)
 		return;
-	BasePath = PrefPath();
-	char TmpPath[strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1];
-	stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
-	MainResources = LoadResources(TmpPath, &ResourceCache);
-	if (!MainResources)
-		BailOut("%s: %s", TmpPath, strerror(errno));
+	{
+		BasePath = PrefPath();
+		char TmpPath[strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1];
+		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
+		MainResources = LoadResources(TmpPath, &ResourceCache);
+		if (!MainResources && errno != ENOENT)
+			BailOut("%s: %s", TmpPath, strerror(errno));
+	}
+	if (!MainResources) {
+		BasePath = SDL_GetBasePath();
+		char TmpPath[strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1];
+		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
+		MainResources = LoadResources(TmpPath, &ResourceCache);
+		if (!MainResources)
+			BailOut("%s: %s", TmpPath, strerror(errno));
+	}
 }
 
 void KillResources(void)
@@ -86,38 +96,38 @@ void KillResources(void)
 	ReleaseResources(&LevelResources, &LevelResourceCache);
 }
 
-Boolean MountMapFileAbsolute(const char *FileName)
+Boolean MountMapFile(const char *FileName)
 {
 	ReleaseResources(&LevelResources, &LevelResourceCache);
 	MapListPtr = NULL;
 	SoundListPtr = NULL;
 	SongListPtr = NULL;
 	WallListPtr = NULL;
+
+	if (!FileName)
+		FileName = DefaultLevelsPath;
+
 	LevelResources = LoadResources(FileName, &LevelResourceCache);
 	if (LevelResources == NULL)
 		BailOut("MountMapFile: %s: %s", FileName, strerror(errno));
 	return LevelResources != NULL;
 }
 
-Boolean MountMapFile(const char *FileName)
+void EnumerateLevels(SDL_EnumerateDirectoryCallback callback, void *userdata)
 {
 	const char *BasePath;
-
-	if (!FileName)
-		FileName = DefaultLevelsPath;
-	BasePath = PrefPath();
-	char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + strlen(FileName) + 1];
-	stpcpy(stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder), FileName);
-	return MountMapFileAbsolute(TmpPath);
-}
-
-bool EnumerateLevels(SDL_EnumerateDirectoryCallback callback, void *userdata)
-{
-	const char *BasePath;
-	BasePath = PrefPath();
-	char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1];
-	stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
-	return SDL_EnumerateDirectory(TmpPath, callback, userdata);
+	{
+		BasePath = PrefPath();
+		char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1];
+		stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
+		SDL_EnumerateDirectory(TmpPath, callback, userdata);
+	}
+	{
+		BasePath = SDL_GetBasePath();
+		char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1];
+		stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
+		SDL_EnumerateDirectory(TmpPath, callback, userdata);
+	}
 }
 
 static void *ReadResource(Word RezNum, LongWord Type, RFILE *Rp, LongWord *Len)
