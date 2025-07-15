@@ -229,29 +229,37 @@ void res_printattr (const ResAttr *attr, uint32_t type) {
 #pragma mark Private Functions
 #endif
 
-void* res_bread (RFILE *rp, void *buf, size_t offset, size_t count) {
+void* res_bread (RFILE *rp, void *buf, size_t offset, size_t count, size_t *read) {
     if (offset+count > rp->size) efail(EFAULT);
     if (buf == NULL) buf = malloc(count);
     if (buf == NULL) efail(ENOMEM);
 
-    if (rp->buf)
+    size_t r;
+    if (rp->buf) {
         // memory
         memcpy(buf, rp->buf+offset, count);
-    else if (rp->fp) {
+        r = count;
+    } else if (rp->fp) {
         // file pointer
         fseek(rp->fp, offset, SEEK_SET);
-        fread(buf, 1, count, rp->fp);
+        r = fread(buf, 1, count, rp->fp);
     } else {
         // functions
         rp->seek(rp->fpriv, (long)offset, (int)SEEK_SET);
-        rp->read(rp->fpriv, buf, (unsigned long)count);
+        r = rp->read(rp->fpriv, buf, (unsigned long)count);
     }
+    if (read)
+        *read = r;
     return buf;
 }
 
 uint32_t res_szread (RFILE *rp, size_t offset) {
+    size_t count;
     uint32_t r = 0;
-    res_bread(rp, &r, offset, sizeof r);
+    if (!res_bread(rp, &r, offset, sizeof r, &count))
+        return 0;
+    if (count != sizeof r)
+        return 0;
     return ntohl(r);
 }
 
@@ -263,27 +271,33 @@ void* res_read_raw (RFILE *rp, struct RmResRef *ref, void *buf, size_t start, si
     if (rstart+size > rp->size) efail(EFAULT);
     if (buf == NULL) buf = malloc(ref->psize);
     if (buf == NULL) efail(ENOMEM);
-    if (read) *read = size;
     if (remain) *remain = ref->psize - (size + start);
 
-    return res_bread(rp, buf, rstart, size);
+    return res_bread(rp, buf, rstart, size, read);
 }
 
 RFILE* res_load (RFILE *rp) {
     // read header
     struct RfHdr hdr;
-    res_bread(rp, &hdr, 0, sizeof(struct RfHdr));
+    struct RfMap *map = NULL;
+    size_t count;
+    if (!res_bread(rp, &hdr, 0, sizeof(struct RfHdr), &count) || count != sizeof(struct RfHdr)) egoto(EINVAL, error);
     rp->dataOffset = ntohl(hdr.dataOffset);
 
     // read map
-    struct RfMap *map = res_bread(rp, NULL, (size_t)ntohl(hdr.mapOffset), (size_t)ntohl(hdr.mapLength));
-    if (map == NULL) egoto(EINVAL, error);
+    size_t mapLength = ntohl(hdr.mapLength);
+    if (mapLength < sizeof(struct RfMap) + sizeof(struct RfTypeList)) egoto(EINVAL, error);
+    map = res_bread(rp, NULL, (size_t)ntohl(hdr.mapOffset), mapLength, &count);
+    if (map == NULL || count != mapLength) egoto(EINVAL, error);
     rp->attributes = ntohs(map->attributes);
-    struct RfTypeList *types = ((void*)map)+ntohs(map->typeListOffset);
-    uint8_t *names = ((void*)map)+ntohs(map->nameListOffset);
+    size_t typeListOffset = ntohs(map->typeListOffset);
+    struct RfTypeList *types = ((void*)map)+typeListOffset;
+    size_t nameListOffset = ntohs(map->nameListOffset);
+    uint8_t *names = ((void*)map)+nameListOffset;
 
     // read types
     rp->numTypes = 1+(int16_t)ntohs(types->count);
+    if (mapLength < typeListOffset + rp->numTypes * sizeof(struct RfTypeList)) egoto(EINVAL, error);
     rp->types = calloc(rp->numTypes, sizeof(struct RmType));
     if (rp->types == NULL) egoto(ENOMEM, error);
     bzero(rp->types, sizeof(struct RmType) * rp->numTypes);
@@ -298,7 +312,9 @@ RFILE* res_load (RFILE *rp) {
 
         // read resource refs & names
         int refsNeedSort = 0;
-        struct RfRefEntry *ent = ((void*)types)+ntohs(types->entry[i].offset);
+        size_t refOffset = ntohs(types->entry[i].offset);
+        if (mapLength < refOffset + sizeof(struct RfRefEntry)) egoto(EINVAL, error);
+        struct RfRefEntry *ent = ((void*)types)+refOffset;
         for(int j=0; j < t->count; j++) {
             t->list[j].ID = ntohs(ent[j].ID);
             if (j && (t->list[j].ID < t->list[j-1].ID)) refsNeedSort = 1;
@@ -307,8 +323,9 @@ RFILE* res_load (RFILE *rp) {
             t->list[j].psize = res_szread(rp, rp->dataOffset+t->list[j].offset);
 
             uint16_t nameOffset = ntohs(ent[j].nameOffset);
-            if (nameOffset == 0xFFFF) t->list[j].name = NULL;
-            else {
+            if (nameOffset != 0xFFFF) {
+                if (mapLength < nameListOffset + nameOffset + 1) egoto(EINVAL, error);
+                if (mapLength < nameListOffset + nameOffset + 1 + names[nameOffset]) egoto(EINVAL, error);
                 t->list[j].name = malloc(names[nameOffset]+1);
                 if (t->list[j].name == NULL) egoto(ENOMEM, error);
                 t->list[j].name[names[nameOffset]] = '\0';
@@ -318,7 +335,8 @@ RFILE* res_load (RFILE *rp) {
             // find logical size
             if (t->list[j].flags.fl.compressed) {
                 struct RfCmpHdr cmpHdr;
-                if (res_read_raw(rp, &t->list[j], &cmpHdr, 0, sizeof cmpHdr, NULL, NULL) == NULL)
+                size_t read;
+                if (res_read_raw(rp, &t->list[j], &cmpHdr, 0, sizeof cmpHdr, &read, NULL) == NULL || read != sizeof cmpHdr)
                     goto notCompressed;
                 if (ntohl(cmpHdr.tag) != kCompressedResourceTag)
                     goto notCompressed;

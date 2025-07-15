@@ -114,7 +114,7 @@ struct __attribute__ ((__packed__)) RfCmpHdr {
 };
 
 // private functions
-void* res_bread (RFILE *rp, void *buf, size_t offset, size_t count);
+void* res_bread (RFILE *rp, void *buf, size_t offset, size_t count, size_t *read);
 uint32_t res_szread (RFILE *rp, size_t offset);
 RFILE* res_load (RFILE *rp);
 int res_ref_compar (const struct RmResRef *, const struct RmResRef *);
