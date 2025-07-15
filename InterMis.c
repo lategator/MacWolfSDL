@@ -26,12 +26,12 @@ static LongWord BonusScore;	/* Additional points */
 /**********************************
 
 	Draw BJ if needed
-	
+
 **********************************/
 
 static Rect BJRect = {48,73,48+142,73+131};	/* Rect for BJ's picture */
-static void ShowBJ(void) 
-{		
+static void ShowBJ(void)
+{
 	if ((ReadTick()-BJTime) >= 20) {		/* Time to draw a BJ? */
 		BJTime = ReadTick();				/* Set the new time */
 		if (WhichBJ!=2) {			/* Thumbs up? */
@@ -45,7 +45,7 @@ static void ShowBJ(void)
 /**********************************
 
 	Have BJ Breath for a while
-	
+
 **********************************/
 
 static void BJBreath(Word Delay)
@@ -60,13 +60,13 @@ static void BJBreath(Word Delay)
 
 /**********************************
 
-	Draw the score 
-	
+	Draw the score
+
 **********************************/
 
 static Rect ScoreRect = {SCOREY,SCOREX,SCOREY+22,SCOREX+(12*7)};
 
-static void DrawIScore(void) 
+static void DrawIScore(void)
 {
 	SetNumber(gamestate.score,SCOREX,SCOREY,7);		/* Draw the game score */
 	BlastScreen2(&ScoreRect);
@@ -75,7 +75,7 @@ static void DrawIScore(void)
 /**********************************
 
 	Draw the earned bonus
-	
+
 **********************************/
 
 static Rect BonusRect = {BONUSY,BONUSX,BONUSY+22,BONUSX+(12*7)};
@@ -88,7 +88,7 @@ static void DrawIBonus(void)
 /**********************************
 
 	Draw a time value at the given coords
-	
+
 **********************************/
 
 static void DrawTime(Word x,Word y,Word time)
@@ -100,7 +100,7 @@ static void DrawTime(Word x,Word y,Word time)
 	TimeRect.right = x+((12*4)+TIMEWIDTH);
 	TimeRect.top = y;
 	TimeRect.bottom = y+22;
-	
+
 	minutes = time/60;
 	seconds = time%60;
 	SetNumber(minutes,x,y,2);
@@ -112,13 +112,13 @@ static void DrawTime(Word x,Word y,Word time)
 /**********************************
 
 	Draws a ratio value at the given coords.
-	
+
 **********************************/
 
 static void DrawRatio(Word x,Word y,Word theRatio)
 {
 	Rect RatioRect;
-	
+
 	RatioRect.top = y;
 	RatioRect.left = x;
 	RatioRect.bottom = y+22;
@@ -180,7 +180,7 @@ static void RollRatio(Word x,Word y,Word ratio)
 		DrawRatio(x,y,i);
 		PlaySound(SND_MGUN|0x8000);
 		ShowBJ();
-		if (WaitTicksEvent(6)) {	
+		if (WaitTicksEvent(6)) {
 			NoDelay = 1;
 			break;
 		}
@@ -206,7 +206,7 @@ static void RollRatio(Word x,Word y,Word ratio)
 /**********************************
 
 	Let's show 'em how they did!
-	
+
 **********************************/
 
 void LevelCompleted (void)
@@ -220,7 +220,7 @@ void LevelCompleted (void)
 
 	ParTime = MapListPtr->InfoArray[gamestate.mapon].ParTime;
 	BonusScore = 0;		/* Init the bonus */
-	
+
 	IntermissionHack = TRUE;	/* Hack to keep score from drawing twice */
 	NumberIndex = 47;		/* Hack to draw score using an alternate number set */
 	NewGameWindow(1);		/* Force 512 mode screen */
@@ -239,7 +239,7 @@ void LevelCompleted (void)
 	memcpy(Indexs,BJPtr,sizeof Indexs);		/* Copy the index table */
 	for (int i = 0; i < 3; i++)
 		Indexs[i] = SwapLongBE(Indexs[i]);
-	
+
 	WhichBJ = 0;		/* Init BJ */
 	BJTime = ReadTick()-50;		/* Force a redraw */
 	BlastScreen();		/* Draw the screen */
@@ -249,7 +249,7 @@ void LevelCompleted (void)
 	DrawIScore();			/* Draw the current score */
 
 	/* First an initial pause */
-	
+
 	BJBreath(60);
 
 	/* Display Par Time, Player's Time, and show bonus if any. */
@@ -306,7 +306,7 @@ void LevelCompleted (void)
 /**********************************
 
 	Handle the intermission screen
-	
+
 **********************************/
 
 void Intermission (void)
@@ -327,7 +327,7 @@ void Intermission (void)
 /**********************************
 
 	Okay, let's face it: they won the game.
-	
+
 **********************************/
 
 void VictoryIntermission (void)
@@ -339,7 +339,7 @@ void VictoryIntermission (void)
 /**********************************
 
 	Show player the game characters
-	
+
 **********************************/
 
 #define NUMCAST 12

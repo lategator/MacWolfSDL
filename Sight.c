@@ -18,7 +18,7 @@ Boolean CheckLine(actor_t *ActorPtr)
 	Word intercept;	/* Temp for door code */
 	Word tile;		/* Temp for tile check */
 	Byte partial;	/* Fraction to force whole numbers */
-	
+
 	actorx = ActorPtr->x;		/* Get the actor's x,y */
 	actortx = actorx>>FRACBITS;	/* Get the actor's tile x,y */
 	actory = ActorPtr->y;
@@ -26,7 +26,7 @@ Boolean CheckLine(actor_t *ActorPtr)
 
 	playerx = actors[0].x;	/* Get the player's x,y */
 	playertx = playerx>>FRACBITS;	/* Get the player's tile x,y */
-	playery = actors[0].y;	
+	playery = actors[0].y;
 	playerty = playery>>FRACBITS;
 
 	/* The actor COULD be standing on a blocked tile (On a CLOSING door tile) */
@@ -38,9 +38,9 @@ Boolean CheckLine(actor_t *ActorPtr)
 #endif
 
 /* check for solid tiles at x crossings */
-	
+
 	if (playertx!=actortx) {		/* Scan in the x direction? */
-		if (actortx<playertx) {		
+		if (actortx<playertx) {
 			partial = -actorx;	/* Isolate the fraction */
 			xl = actortx-1;			/* Actor is on the left side */
 			xh = playertx-1;
@@ -102,7 +102,7 @@ Boolean CheckLine(actor_t *ActorPtr)
 		Step = FixedDiv(delta,deltafrac);
 		Frac = FixedByFrac(Step,partial)+xl;
 		do {
-			++yl;	
+			++yl;
 			tile = tilemap[yl][Frac>>FRACBITS];
 			if (tile & TI_BLOCKSIGHT) {
 				return FALSE;
@@ -129,7 +129,7 @@ void FirstSighting(actor_t *ActorPtr)
 {
 	classinfo_t	*info;
 	Word sound;
-	
+
 	info = &classinfo[ActorPtr->class];	/* Get pointer to info record */
 	sound = info->sightsound;			/* Get the requested sound */
 	if (sound == SND_ESEE) {	/* make random human sound*/
@@ -174,5 +174,3 @@ void T_Stand(actor_t *ActorPtr)
 		ActorPtr->reacttime = (w_rnd() & classinfo[ActorPtr->class].reactionmask)*4+1;
 	}
 }
-
-

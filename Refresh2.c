@@ -116,10 +116,10 @@ Word tantoangle[513] = {
 /**********************************
 
 	Get the memory for the scale tables
-	
+
 **********************************/
 
-void GetTableMemory(void) 
+void GetTableMemory(void)
 {
 	#if 1		/* Only the mac version will calculate the tables */
 						/* All other versions will load precalc'd tables from disk */

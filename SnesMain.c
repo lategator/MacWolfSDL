@@ -20,7 +20,7 @@ void SetupPlayScreen (void)
 /**********************************
 
 	Display the automap
-	
+
 **********************************/
 
 void RunAutoMap(void)
@@ -29,7 +29,7 @@ void RunAutoMap(void)
 	Word Width,Height;
 	Word CenterX,CenterY;
 	Word oldjoy,newjoy;
-	
+
 	MakeSmallFont();				/* Make the tiny font */
 	playstate = EX_AUTOMAP;
 	vx = viewx>>8;					/* Get my center x,y */
@@ -60,7 +60,7 @@ void RunAutoMap(void)
 		newjoy = joystick1 ^ oldjoy;
 		if (newjoy & (JOYPAD_START|JOYPAD_SELECT|JOYPAD_A|JOYPAD_B|JOYPAD_X|JOYPAD_Y)) {
 			playstate = EX_STILLPLAYING;
-		} 
+		}
 		if (newjoy & JOYPAD_UP && vy) {
 			--vy;
 		}
@@ -88,11 +88,11 @@ void RunAutoMap(void)
 /**********************************
 
 	Begin a new game
-	
+
 **********************************/
 
 void StartGame(void)
-{	
+{
 	if (playstate!=EX_LOADGAME) {	/* Variables already preset */
 		NewGame();				/* init basic game stuff */
 	}
@@ -103,7 +103,7 @@ void StartGame(void)
 
 /**********************************
 
-	Show the game logo 
+	Show the game logo
 
 **********************************/
 
@@ -146,7 +146,7 @@ int main()
 {
 	InitTools();		/* Init the system environment */
 	WaitTick();			/* Wait for a system tick to go by */
-	playstate = (exit_t)setjmp(ResetJmp);	
+	playstate = (exit_t)setjmp(ResetJmp);
 	NumberIndex = 36;	/* Force the score to redraw properly */
 	IntermissionHack = FALSE;
 	if (playstate) {

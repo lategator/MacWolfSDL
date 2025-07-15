@@ -4,16 +4,16 @@
 Word *src1,*src2,*dest;		/* Used by the sort */
 
 /**********************************
-	
+
 	Merges src1/size1 and src2/size2 to dest
 	Both Size1 and Size2 MUST be non-zero
-	
+
 **********************************/
 
 void Merge(Word Size1, Word Size2)
 {
 	Word *XDest,*XSrc1,*XSrc2;
-	
+
 /* merge two parts of the unsorted array to the sorted array */
 
 	XDest = dest;
@@ -22,7 +22,7 @@ void Merge(Word Size1, Word Size2)
 	src1 = &XSrc1[Size1];
 	XSrc2 = src2;
 	src2 = &XSrc2[Size2];
-	
+
 	if (XSrc1[0] < XSrc2[0]) {		/* Which sort to use? */
 mergefrom1:
 		do {
@@ -56,10 +56,10 @@ mergefrom1:
 }
 
 /**********************************
-	
+
 	Sorts the events from xevents[0] to xevent_p
 	firstevent will be set to the first sorted event (either xevents[0] or sortbuffer[0])
-	
+
 **********************************/
 
 void SortEvents(void)
@@ -69,33 +69,33 @@ void SortEvents(void)
 	Word	sort;	/* Sort count */
 	Word	remaining;	/* Temp merge count */
 	Word	*sorted,*unsorted,*temp;
-    
+
 	count = numvisspr;		/* How many entries are there? */
 	if (count<2) {
 		firstevent = xevents;	/* Just return the 0 or 1 entries */
 		return;				/* Leave now */
 	}
-	
+
 	size = 1;		/* source size		(<<1 / loop)*/
 	sort = 1;		/* iteration number (+1 / loop)*/
 	sorted = xevents;
 	unsorted = sortbuffer;
-	
+
 	do {
 		remaining = count>>sort;	/* How many times to try */
-		
+
 		/* pointers incremented by the merge */
 		src1 = sorted;		/* Sorted array */
 		src2 = &sorted[remaining<<(sort-1)];	/* Half point */
 		dest = unsorted;	/* Dest array */
-		
+
 		/* merge paired blocks*/
 		if (remaining) {	/* Any to sort? */
 			do {
 				Merge(size,size);	/* All groups equal size */
 			} while (--remaining);
 		}
-		
+
 		/* copy or merge the leftovers */
 		remaining = count&((size<<1)-1);	/* Create mask (1 bit higher) */
 		if (remaining > size) {	/* one complete block and one fragment */
@@ -104,9 +104,9 @@ void SortEvents(void)
 		} else if (remaining) {	/* just a single sorted fragment */
 			memcpy(dest,src2,remaining*sizeof(Word));	/* Copy it */
 		}
-		
+
 		/* get ready to sort back to the other array */
-		
+
 		size <<= 1;		/* Double the entry size */
 		++sort;			/* Increase the shift size */
 		temp = sorted;	/* Swap the pointers */
@@ -117,17 +117,17 @@ void SortEvents(void)
 }
 
 /**********************************
-	
+
 	Draw a single scaled sprite
 	x1 = Left edge, x2 = Right edge, rs_vseg = record for sprite
-	
+
 **********************************/
 
 void RenderSprite(Word x1,Word x2,vissprite_t *VisPtr)
 {
 	Word column;
 	Word scaler;
-		
+
 	scaler = VisPtr->clipscale;		/* Get the size of the sprite */
 	column = 0;					/* Start at the first column */
 	if ((int) x1 > VisPtr->x1) {		/* Clip the left? */
@@ -145,9 +145,9 @@ void RenderSprite(Word x1,Word x2,vissprite_t *VisPtr)
 }
 
 /**********************************
-	
+
 	Add a sprite entry to the render list
-	
+
 **********************************/
 
 void AddSprite (thing_t *thing,Word actornum)
@@ -163,7 +163,7 @@ void AddSprite (thing_t *thing,Word actornum)
 	vissprite_t *VisPtr;	/* Local pointer to visible sprite record */
 
 /* transform the origin point */
-	
+
 	if (numvisspr>=(MAXVISSPRITES-1)) {
 		return;
 	}
@@ -174,7 +174,7 @@ void AddSprite (thing_t *thing,Word actornum)
 	if (tz < MINZ) {		/* Too close? */
 		return;
 	}
-		
+
 	if (tz>=MAXZ) {		/* Force smallest */
 		tz = MAXZ-1;
 	}
@@ -185,7 +185,7 @@ void AddSprite (thing_t *thing,Word actornum)
 /* calculate edges of the shape */
 
 	patch = SpriteArray[thing->sprite];	/* Pointer to the sprite info */
-	
+
 	width =((LongWord)SwapUShortBE(patch[0])*scale)>>6; 	/* Get the width of the shape */
 	if (!width) {
 		return;		/* too far away*/
@@ -213,9 +213,9 @@ void AddSprite (thing_t *thing,Word actornum)
 }
 
 /**********************************
-	
+
 	Draw a scaling game over sprite on top of everything
-	
+
 **********************************/
 
 void DrawTopSprite(void)
@@ -230,13 +230,13 @@ void DrawTopSprite(void)
 /* calculate edges of the shape */
 
 		patch = SpriteArray[topspritenum];		/* Get the info on the shape */
-		
+
 		width = (SwapUShortBE(patch[0])*topspritescale)>>7;		/* Adjust the width */
-		if (!width) {	
+		if (!width) {
 			return;		/* Too far away */
 		}
 		x1 = CENTERX - (width>>1);		/* Use the center to get the left edge */
-		if (x1 >= SCREENWIDTH) {		
+		if (x1 >= SCREENWIDTH) {
 			return;		/* off the right side*/
 		}
 		x2 = x1 + width - 1;		/* Get the right edge */
@@ -263,9 +263,9 @@ void DrawTopSprite(void)
 }
 
 /**********************************
-	
+
 	Draw all the character sprites
-	
+
 **********************************/
 
 void DrawSprites(void)
@@ -279,7 +279,7 @@ void DrawSprites(void)
 	Word *xe;				/* Pointer to sort value */
 
 	numvisspr = 0;			/* Init the sprite count */
-	
+
 /* add all sprites in visareas*/
 
 	if (numstatics) {		/* Any statics? */
@@ -292,7 +292,7 @@ void DrawSprites(void)
 			++stat;		/* Next index */
 		} while (--i);	/* Count down */
 	}
-	
+
 	if (numactors>1) {		/* Any actors? */
 		i = 1;				/* Index to the first NON-PLAYER actor */
 		actor = &actors[1];	/* Init pointer */
@@ -303,7 +303,7 @@ void DrawSprites(void)
 			++actor;		/* Next actor */
 		} while (++i<numactors);	/* Count up */
 	}
-	
+
 	if (nummissiles) {		/* Any missiles? */
 		i = nummissiles;	/* Get the missile count */
 		MissilePtr = missiles;	/* Get the pointer to the first missile */
@@ -340,6 +340,3 @@ void DrawSprites(void)
 		} while (--i);
 	}
 }
-
-
-

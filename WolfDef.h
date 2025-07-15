@@ -21,7 +21,7 @@ segment "Wolf3d";		/* Code segment */
 #define	SLOPEBITS 9		/* Used in AngleFromSlope2 */
 
 typedef unsigned short angle_t;		/* Must be short to allow wraparound */
-typedef short fixed_t;				/* 8.8 fixed point number */	
+typedef short fixed_t;				/* 8.8 fixed point number */
 typedef unsigned short ufixed_t;	/* 8.8 unsigned fixed point number */
 
 #include "Burger.h"		/* My standard system equates */
@@ -35,14 +35,14 @@ typedef unsigned short ufixed_t;	/* 8.8 unsigned fixed point number */
 /**********************************
 
 	Game constants and equates
-	
+
 	The game uses a tile map of 64X64 tiles and uses a 16 bit fixed
 	point number to record the placement of any object in the game. The
 	upper 8 bits are the tile with the lower 8 bits being which fraction into the
-	tile the player is standing on. 
-	
+	tile the player is standing on.
+
 	To adjust the screen size, modify SCREENWIDTH,SCREENHEIGHT,VIEWHEIGHT,ScaleX,ScaleY
-	
+
 **********************************/
 
 #define	MAXVISSPRITES 64	/* Maximum number of sprites to display (Must be a power of 2!) */
@@ -62,7 +62,7 @@ typedef unsigned short ufixed_t;	/* 8.8 unsigned fixed point number */
 #define MINZ 62			/* PLAYERSIZE/sqrt(2) rounded down*/
 #define	MAXZ (32*FRACUNIT)	/* Farthest thing away */
 #define	FINEANGLES	0x2000		/* Power of 2 */
-#define	FINEMASK	(FINEANGLES-1)	
+#define	FINEMASK	(FINEANGLES-1)
 #define	ANGLETOFINESHIFT	3	/* 0x10000 >> 0x2000*/
 #define GAMEANGLETOFINE		4	/* 512 << 0x2000 */
 #define	ANGLE90		0x4000		/* Use a 0x10000 angle range */
@@ -123,8 +123,8 @@ extern Word MacViewHeight;
 
 /**********************************
 
-	Game enums and record lists 
-	
+	Game enums and record lists
+
 **********************************/
 
 typedef enum {		/* Think logic states (MUST match thinkcalls in EnThink.c) */
@@ -132,7 +132,7 @@ typedef enum {		/* Think logic states (MUST match thinkcalls in EnThink.c) */
 	T_STAND,		/* Watch for player */
 	T_CHASE			/* Chase player */
 } thinklogic_t;
-	
+
 typedef enum {		/* Action logic states (MUST match actioncalls in EnThink.c */
 	A_NULL,			/* No action */
 	A_TARGET,		/* Target the player */
@@ -207,7 +207,7 @@ typedef enum {		/* actor class info*/
 	CL_SS,
 	CL_DOG,
 	CL_MUTANT,
-	
+
 	CL_HANS,
 	CL_SCHABBS,
 	CL_TRANS,
@@ -215,7 +215,7 @@ typedef enum {		/* actor class info*/
 	CL_DKNIGHT,
 	CL_MECHAHITLER,
 	CL_HITLER,
-	
+
 	CL_PLAYER
 } class_t;
 
@@ -224,7 +224,7 @@ enum {BSPTOP,BSPBOTTOM,BSPLEFT,BSPRIGHT};	/* BSP quadrants */
 /**********************************
 
 	Compiled scaler
-	
+
 **********************************/
 
 typedef struct {
@@ -239,7 +239,7 @@ typedef struct {
 /**********************************
 
 	Status of the game (Save game record)
-	
+
 **********************************/
 
 typedef	struct {
@@ -270,7 +270,7 @@ typedef	struct {
 /**********************************
 
 	Map data record (Stored maps)
-	
+
 **********************************/
 
 typedef struct {
@@ -300,7 +300,7 @@ typedef struct {
 /**********************************
 
 	Static data for each sprite state
-	
+
 **********************************/
 
 typedef struct {
@@ -321,10 +321,10 @@ enum {di_north, di_east, di_south, di_west};		/* BSP base directions */
 
 /**********************************
 
-	The saved data structures are held in a single list, with segs being differentiated from 
+	The saved data structures are held in a single list, with segs being differentiated from
 	nodes by the presence of DIR_SEGFLAG in the dir field
 	Note... saveseg_t and savenode_t share the same memory
-	
+
 **********************************/
 
 #define	DIR_SEGFLAG		0x80	/* Use segment value */
@@ -350,7 +350,7 @@ typedef struct {
 
 	Static object struct
 	(Bullets,food,gold)
-	
+
 **********************************/
 
 /* Used by the renderer, must match the header of static_t, actor_t, missile_t */
@@ -370,7 +370,7 @@ typedef struct {	/* Must match thing_t */
 /**********************************
 
 	Static door struct
-	
+
 **********************************/
 
 typedef	enum {
@@ -403,7 +403,7 @@ typedef struct {
 /**********************************
 
 	Pushwall state struct
-	
+
 **********************************/
 
 typedef struct {
@@ -418,7 +418,7 @@ typedef struct {
 /**********************************
 
 	Sprite state struct
-	
+
 **********************************/
 
 typedef struct {
@@ -432,7 +432,7 @@ typedef struct {
 /**********************************
 
 	Visible sprite struct (Used to render the sprites)
-	
+
 **********************************/
 
 typedef struct {
@@ -446,7 +446,7 @@ typedef struct {
 /**********************************
 
 	Data struct for thinking actor
-	
+
 **********************************/
 
 /* Actor flags */
@@ -481,7 +481,7 @@ typedef struct {	/* Must match thing_t */
 
 	Missile struct
 	(Rockets, flames)
-	
+
 **********************************/
 
 typedef enum {		/* Flame type */
@@ -507,7 +507,7 @@ typedef struct {		/* Must match thing_t */
 /**********************************
 
 	Flags used by tilemap, NOTE: this allows only 128 unique tiles
-	
+
 **********************************/
 
 #define	TI_SECRET		0x8000		/* Secret level switch */
@@ -817,7 +817,7 @@ extern Word nummissiles;					/* Number of active missiles */
 extern missile_t missiles[MAXMISSILES];		/* Data for the missile items */
 extern Word numactors;						/* Number of active actors */
 extern actor_t actors[MAXACTORS];			/* Data for the actors */
-extern t_compscale *AllScalers[MAXSCALER];	/* Pointers to all the compiled scalers */	
+extern t_compscale *AllScalers[MAXSCALER];	/* Pointers to all the compiled scalers */
 extern Byte *GameShapes[57];		/* Pointer to the game shape array */
 extern Word difficulty;					/* 0 = easy, 1= normal, 2=hard*/
 extern gametype_t gamestate;			/* Status of the game (Save game) */
@@ -875,4 +875,3 @@ extern unsigned short *WallListPtr;	/* Pointer to wall list record */
 extern Word MaxScaler;			/* Maximum number of VALID scalers */
 extern Word NaziSound[];		/* Sounds for nazis starting */
 extern Boolean ShowPush;		/* Cheat for showing pushwalls on automap */
-

@@ -3,9 +3,9 @@
 
 /**********************************
 
-	Draw a space padded list of numbers 
+	Draw a space padded list of numbers
 	for the score
-	
+
 **********************************/
 
 LongWord pow_10[] = {1,10,100,1000,10000,100000,1000000};
@@ -16,7 +16,7 @@ void SetNumber(LongWord number,Word x,Word y,Word digits)
     LongWord val;
     Word count;
     Word empty;
-    
+
     empty = 1;			/* No char's drawn yet */
     while (digits) {	/* Any digits left? */
          count = 0;		/* No value yet */
@@ -39,13 +39,13 @@ void SetNumber(LongWord number,Word x,Word y,Word digits)
 /**********************************
 
 	Read from the Mac's keyboard/mouse system
-	
+
 **********************************/
 
 void IO_CheckInput(void)
 {
 	ReadSystemJoystick();	/* Set the variable "joystick1" */
-	
+
 /* check for auto map */
 
     if (joystick1 & JOYPAD_START) {
@@ -82,7 +82,7 @@ void IO_CheckInput(void)
 /**********************************
 
 	Draw the floor and castle #
-	
+
 **********************************/
 
 void IO_DrawFloor(Word floor)
@@ -94,7 +94,7 @@ void IO_DrawFloor(Word floor)
 /**********************************
 
 	Draw the score
-	
+
 **********************************/
 
 void IO_DrawScore(LongWord score)
@@ -107,13 +107,13 @@ void IO_DrawScore(LongWord score)
 /**********************************
 
 	Draw the number of live remaining
-	
+
 **********************************/
 
 void IO_DrawLives(Word lives)
 {
-    
-   	if (!IntermissionHack) {			/* Don't draw during intermission! */   	
+
+   	if (!IntermissionHack) {			/* Don't draw during intermission! */
 	    --lives;			/* Adjust for zero start value */
     	if (lives > 9) {
     		lives = 9;		/* Failsafe */
@@ -125,7 +125,7 @@ void IO_DrawLives(Word lives)
 /**********************************
 
 	Draw the health
-	
+
 **********************************/
 
 void IO_DrawHealth(Word health)
@@ -136,7 +136,7 @@ void IO_DrawHealth(Word health)
 /**********************************
 
 	Draw the ammo remaining
-	
+
 **********************************/
 
 void IO_DrawAmmo(Word ammo)
@@ -147,7 +147,7 @@ void IO_DrawAmmo(Word ammo)
 /**********************************
 
 	Draw the treasure score
-	
+
 **********************************/
 
 void IO_DrawTreasure(Word treasure)
@@ -158,7 +158,7 @@ void IO_DrawTreasure(Word treasure)
 /**********************************
 
 	Draw the keys held
-	
+
 **********************************/
 
 void IO_DrawKeys(Word keys)
@@ -174,7 +174,7 @@ void IO_DrawKeys(Word keys)
 /**********************************
 
 	Draw the gun in the foreground
-	
+
 **********************************/
 
 void IO_AttackShape(Word shape)
@@ -185,7 +185,7 @@ void IO_AttackShape(Word shape)
 /**********************************
 
 	Draw the BJ's face
-	
+
 **********************************/
 
 void IO_DrawFace(Word face)
@@ -196,7 +196,7 @@ void IO_DrawFace(Word face)
 /**********************************
 
 	Redraw the main status bar
-	
+
 **********************************/
 
 void IO_DrawStatusBar(void)
@@ -207,7 +207,7 @@ void IO_DrawStatusBar(void)
 /**********************************
 
 	Erase the floor and ceiling
-	
+
 **********************************/
 
 #ifndef __APPLEIIGS__		/* Done in assembly on the IIgs version */
@@ -247,14 +247,14 @@ void IO_ClearViewBuffer(void)
 /**********************************
 
 	Copy the 3-D screen to display memory
-	
+
 **********************************/
 
 void IO_DisplayViewBuffer (void)
 {
 	BlastScreen();
 /* if this is the first frame rendered, upload everything and fade in */
-    if (firstframe) { 
+    if (firstframe) {
 		FadeTo(rGamePal);
 		firstframe = 0;
     }

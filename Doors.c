@@ -25,13 +25,13 @@ Every time a door opens or closes the areabyplayer matrix gets recalculated.
 	Note: I can have MORE than one connection between rooms
 	so it is VALID to have duplicate entries (1,6) & (1,6)
 	Each call to AddConnection must be balanced with a call to RemoveConnection
-		
+
 **********************************/
 
 void AddConnection(Word Area1,Word Area2)
 {
 	connect_t *DestPtr;
-	
+
 	DestPtr = &areaconnect[ConnectCount];	/* Make pointer to the last record */
 	DestPtr->Area1 = Area1;					/* Init the struct */
 	DestPtr->Area2 = Area2;
@@ -43,14 +43,14 @@ void AddConnection(Word Area1,Word Area2)
 	Remove a connection between two rooms
 	Note: I can have MORE than one connection between rooms
 	so it is VALID to have duplicate entries (1,6) & (1,6)
-		
+
 **********************************/
 
 void RemoveConnection(Word Area1,Word Area2)
 {
 	Word i;
 	connect_t *DestPtr;
-	
+
 	DestPtr = &areaconnect[0];		/* Init the scan pointer */
 	i = ConnectCount;				/* Init the count */
 	if (!i) {
@@ -72,7 +72,7 @@ void RemoveConnection(Word Area1,Word Area2)
 	Recursive routine to properly set the areabyplayer array by
 	using the contents of the areaconnect array.
 	Scans outward from playerarea, marking all connected areas.
-	
+
 **********************************/
 
 void RecursiveConnect(Word areanumber)
@@ -80,7 +80,7 @@ void RecursiveConnect(Word areanumber)
 	Word i;
 	Word j;
 	connect_t *AreaPtr;
-	
+
 	areabyplayer[areanumber] = TRUE;	/* Mark this spot (Prevent overflow) */
 
 	i = ConnectCount;		/* Init index */
@@ -90,12 +90,12 @@ void RecursiveConnect(Word areanumber)
 			if (AreaPtr->Area1 == areanumber) {		/* Am I in this pair? */
 				j = AreaPtr->Area2;			/* Follow this path */
 				goto TryIt;
-			} 
+			}
 			if (AreaPtr->Area2 == areanumber) {		/* The other side? */
 				j = AreaPtr->Area1;			/* Follow this side */
 TryIt:
 				if (!areabyplayer[j]) {		/* Already been here? */
-					RecursiveConnect(j);	/* Link it in... */	
+					RecursiveConnect(j);	/* Link it in... */
 				}
 			}
 			++AreaPtr;				/* Next entry */
@@ -106,7 +106,7 @@ TryIt:
 /**********************************
 
 	Properly set the areabyplayer record
-	
+
 **********************************/
 
 void ConnectAreas(void)
@@ -118,7 +118,7 @@ void ConnectAreas(void)
 /**********************************
 
 	Start a door opening
-	
+
 **********************************/
 
 void OpenDoor(door_t *door)
@@ -133,7 +133,7 @@ void OpenDoor(door_t *door)
 /**********************************
 
 	Start a door closing
-	
+
 **********************************/
 
 void CloseDoor(door_t *door)
@@ -149,7 +149,7 @@ void CloseDoor(door_t *door)
 	TilePtr = &tilemap[tiley][tilex];	/* Get pointer to tile map */
 
 	if (door->action != DR_OPENING) {	/* In the middle of opening? */
-	
+
 /* don't close on an actor or bonus item */
 
 		tile = TilePtr[0];		/* What's the tile? */
@@ -161,7 +161,7 @@ void CloseDoor(door_t *door)
 			door->ticcount = 60;		/* wait a while before trying to close again */
 			return;
 		}
-	
+
 /* Don't close on the player */
 
 		delta = actors[0].x - ((tilex<<8)|0x80);
@@ -179,20 +179,20 @@ void CloseDoor(door_t *door)
 /**********************************
 
 	Open or Close a door (Press space at a door)
-	
+
 **********************************/
 
 void OperateDoor(Word dooron)
 {
 	Word type;
 	door_t *door;
-	
+
 	door = &doors[dooron];	/* Which door? */
 	type = door->info>>1;	/* Get the door type */
-	
+
 	if ( (type==1 && !(gamestate.keys&1)) || (type==2 && !(gamestate.keys&2)) ) {
 		PlaySound(SND_LOCKEDDOOR);		/* The door is locked */
-		return;	
+		return;
 	}
 
 	switch (door->action) {
@@ -201,7 +201,7 @@ void OperateDoor(Word dooron)
 		OpenDoor(door);		/* Open the door */
 		break;
 	case DR_OPEN:
-	case DR_OPENING:		
+	case DR_OPENING:
 		CloseDoor(door);	/* Close the door */
 	}
 }
@@ -209,7 +209,7 @@ void OperateDoor(Word dooron)
 /**********************************
 
 	Close the door after a few seconds
-	
+
 **********************************/
 
 void DoorOpen(door_t *door)
@@ -224,7 +224,7 @@ void DoorOpen(door_t *door)
 /**********************************
 
 	Step the door animation for open, mark as DR_OPEN if all the way open
-	
+
 **********************************/
 
 void DoorOpening(door_t *door)
@@ -232,11 +232,11 @@ void DoorOpening(door_t *door)
 	Word position;
 	Word area1,area2;
 	Byte *SoundNumPtr;
-	
+
 	position = door->position;	/* Get the pixel position */
 
 	if (!position) {			/* Fully closed? */
-	
+
 	/* door is just starting to open, so connect the areas*/
 		SoundNumPtr = MapPtr->areasoundnum;
 		area1 = SoundNumPtr[door->area1];
@@ -252,9 +252,9 @@ void DoorOpening(door_t *door)
 
 	position += DOORSPEED*TicCount;		/* Move the door a bit */
 	if (position >= TILEGLOBAL-1) {	/* Fully open? */
-	
+
 	/* Door is all the way open */
-	
+
 		position = TILEGLOBAL-1;	/* Set to maximum */
 		door->ticcount = 0;			/* Reset the timer for closing */
 		door->action = DR_OPEN;		/* Mark as open */
@@ -267,7 +267,7 @@ void DoorOpening(door_t *door)
 
 	Step the door animation for close,
 	mark as DR_CLOSED if all the way closed
-	
+
 **********************************/
 
 void DoorClosing(door_t *door)
@@ -280,7 +280,7 @@ void DoorClosing(door_t *door)
 	if (position <= 0) {		/* Will I close now? */
 	/* door is closed all the way, so disconnect the areas*/
 		SoundNumPtr = MapPtr->areasoundnum;	/* Unlink the sound areas */
-		RemoveConnection(SoundNumPtr[door->area1],SoundNumPtr[door->area2]);	
+		RemoveConnection(SoundNumPtr[door->area1],SoundNumPtr[door->area2]);
 		ConnectAreas();		/* Reset areabyplayer */
 		door->action = DR_CLOSED;	/* It's closed */
 		position = 0;	/* Mark as closed */
@@ -291,14 +291,14 @@ void DoorClosing(door_t *door)
 /**********************************
 
 	Process all the doors each game loop
-	
+
 **********************************/
 
 void MoveDoors(void)
 {
-	Word dooron;		/* Which door am I on? */ 
+	Word dooron;		/* Which door am I on? */
 	door_t *door;		/* Pointer to current door */
-	
+
 	dooron = numdoors;	/* How many doors to scan? */
 	if (dooron) {		/* Any doors at all? */
 		door = doors;		/* Pointer to the first door */

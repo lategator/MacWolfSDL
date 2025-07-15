@@ -54,7 +54,7 @@ void NewState(actor_t *ActorPtr,stateindex_t state)
 /**********************************
 
 	Check if I can move in a diagonal direction
-	
+
 **********************************/
 
 Boolean CheckDiag(Word x,Word y)
@@ -71,7 +71,7 @@ Boolean CheckDiag(Word x,Word y)
 	Check if I can move in a sideways direction
 	also do the code for an actor to open a door
 	return 0 if blocked, 1 if open, 2 if I need to open a door
-	
+
 **********************************/
 
 Word CheckSide(Word x,Word y,actor_t *ActorPtr)
@@ -98,7 +98,7 @@ Word CheckSide(Word x,Word y,actor_t *ActorPtr)
 /**********************************
 
 	Try to move the actor around
-		
+
 **********************************/
 
 Boolean TryWalk (actor_t *ActorPtr)
@@ -115,15 +115,15 @@ Boolean TryWalk (actor_t *ActorPtr)
 	case north:				/* Go n,s,e,w */
 		--y;
 		goto DoSide;
-		
+
 	case east:
 		++x;
 		goto DoSide;
-				
+
 	case south:
 		++y;
 		goto DoSide;
-				
+
 	case west:
 		--x;
 DoSide:
@@ -137,7 +137,7 @@ DoSide:
 			return TRUE;	/* I'm ok! */
 		}
 		break;		/* Continue */
-		
+
 	case northeast:
 		if (!CheckDiag(x+1,y)) {
 			return FALSE;
@@ -194,7 +194,7 @@ FixWest:
 /* remove old actor marker*/
 
 	tilemap[ActorPtr->goaly][ActorPtr->goalx] &= ~TI_ACTOR;
-	
+
 /* place new actor marker*/
 
 	TileMapPtr = &tilemap[y][x];	/* Get pointer to cell */
@@ -215,10 +215,10 @@ FixWest:
 }
 
 /**********************************
-	
+
 	Attempts to choose and initiate a movement for actor that sends it towards
 	the player while dodging
-		
+
 **********************************/
 
 void SelectDodgeDir(actor_t *ActorPtr)
@@ -305,10 +305,10 @@ void SelectDodgeDir(actor_t *ActorPtr)
 }
 
 /**********************************
-	
+
 	Attempts to choose and initiate a movement for actor that sends it towards
 	the player but doesn't try to dodge
-		
+
 **********************************/
 
 void SelectChaseDir(actor_t *ActorPtr)
@@ -337,7 +337,7 @@ void SelectChaseDir(actor_t *ActorPtr)
 	} else {
 		d[2]=north;
 	}
-	
+
 	if (w_abs(deltay)>w_abs(deltax)) {	/* Swap if Y is greater */
 		tdir=d[1];
 		d[1]=d[2];
@@ -407,11 +407,11 @@ void SelectChaseDir(actor_t *ActorPtr)
 }
 
 /**********************************
-	
+
 	Moves actor <move> global units in actor->dir direction
 	Actors are not allowed to move inside the player
 	Does NOT check to see if the move is tile map valid
-		
+
 **********************************/
 
 void MoveActor(actor_t *ActorPtr,Word move)
@@ -427,19 +427,19 @@ void MoveActor(actor_t *ActorPtr,Word move)
 	case north:
 		tryy -= move;
 		break;
-		
+
 	case southeast:
 		tryy += move;
 	case east:
 		tryx += move;
 		break;
-	
+
 	case southwest:
 		tryx -= move;
 	case south:
 		tryy += move;
 		break;
-		
+
 	case northwest:
 		tryy -= move;
 	case west:
@@ -454,7 +454,7 @@ void MoveActor(actor_t *ActorPtr,Word move)
 				return;
 			}
 		}
-	}	
+	}
 	ActorPtr->distance-= move;	/* Remove the distance */
 	ActorPtr->x = tryx;		/* Save the new x,y */
 	ActorPtr->y = tryy;

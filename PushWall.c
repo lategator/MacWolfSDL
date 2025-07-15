@@ -14,7 +14,7 @@ pushwall_t PushWallRec;				/* Record for the single pushwall in progress */
 void SetPWallChange(void)
 {
 	Word pos;
-	
+
 	pos = PushWallRec.pwallpos&(FRACUNIT-1);	/* Get the pixel fraction */
 	PushWallRec.pwallxchange = 0;		/* No motion yet */
 	PushWallRec.pwallychange = 0;
@@ -104,9 +104,9 @@ void MovePWalls (void)
 		return;				/* Exit now */
 	}
 	PushWallRec.pwallpos -= 256;		/* Mark as crossed */
-	
+
 	/* the tile can now be walked into */
-	
+
 	tilemap[PushWallRec.pwally][PushWallRec.pwallx] &= ~TI_BLOCKMOVE;	/* The movable block is gone */
 	AdvancePushWall();		/* Remove the bsp seg */
 
@@ -119,4 +119,3 @@ void MovePWalls (void)
 	PushWallRec.pwally = PushWallRec.pwallchecky;
 	PushWallOne();			/* Push one more record */
 }
-

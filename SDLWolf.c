@@ -150,7 +150,7 @@ void BlastScreen2(Rect *BlastRect)
 /**********************************
 
 	Read from the keyboard/mouse system
-	
+
 **********************************/
 
 typedef struct {
@@ -185,7 +185,7 @@ static const Keys2Joy KeyMatrix[] = {
 	{SDL_SCANCODE_KP_0,JOYPAD_A},				/* Keypad 0 */
 	{ SDL_SCANCODE_KP_ENTER,JOYPAD_A},				/* keypad enter */
 	{ SDL_SCANCODE_RALT,JOYPAD_TR},			/* Option */
-	{ SDL_SCANCODE_LALT,JOYPAD_TR},			/* Option */	
+	{ SDL_SCANCODE_LALT,JOYPAD_TR},			/* Option */
 	{ SDL_SCANCODE_RSHIFT,JOYPAD_X},				/* Shift L */
 	{ SDL_SCANCODE_CAPSLOCK,JOYPAD_X},				/* Caps Lock */
 	{ SDL_SCANCODE_LSHIFT,JOYPAD_X},				/* Shift R */
@@ -195,7 +195,7 @@ static const Keys2Joy KeyMatrix[] = {
 };
 
 static const char *CheatPtr[] = {		/* Cheat strings */
-	"XUSCNIELPPA",	
+	"XUSCNIELPPA",
 	"IDDQD",
 	"BURGER",
 	"WOWZERS",
@@ -309,7 +309,7 @@ void ReadSystemJoystick(void)
 					if (gamestate.gas && gamestate.flamethrower) {
 						gamestate.pendingweapon = WP_FLAMETHROWER;
 					}
-					break;	
+					break;
 				case SDLK_6 :		/* 6 */
 					if (gamestate.missiles && gamestate.missile) {
 						gamestate.pendingweapon = WP_MISSILE;
@@ -448,11 +448,11 @@ TryAgain:
 		}
 	}
 	return MacVidSize;
-	
+
 OhShit:			/* Oh oh.... */
 	if (Pass2) {
 		if (!NewVidSize) {		/* At the smallest screen size? */
-			BailOut();	
+			BailOut();
 		}
 		--NewVidSize;			/* Smaller size */
 	} else {
@@ -467,7 +467,7 @@ OhShit:			/* Oh oh.... */
 /**********************************
 
 	Scale the system X coord
-	
+
 **********************************/
 
 Word ScaleX(Word x)
@@ -485,7 +485,7 @@ Word ScaleX(Word x)
 /**********************************
 
 	Scale the system Y coord
-	
+
 **********************************/
 
 Word ScaleY(Word y)
@@ -498,7 +498,7 @@ Word ScaleY(Word y)
 		}
 		return y;
 	case 2:				/* 640 x 400 */
-		return y*2;	
+		return y*2;
 	case 3:				/* 640 x 480 */
 		return y*2+80;
 	}
@@ -508,7 +508,7 @@ Word ScaleY(Word y)
 /**********************************
 
 	Handle GET PSYCHED!
-	
+
 **********************************/
 
 static SDL_FRect PsychedRect;
@@ -517,11 +517,11 @@ static SDL_FRect PsychedRect;
 #define PSYCHEDX 20
 #define PSYCHEDY 46
 #define MAXINDEX (66+S_LASTONE)
-		
+
 /**********************************
 
 	Draw the initial shape
-		
+
 **********************************/
 
 void ShowGetPsyched(void)
@@ -555,7 +555,7 @@ void ShowGetPsyched(void)
 void DrawPsyched(Word Index)
 {
 	float Factor;
-	
+
 	Factor = Index * PSYCHEDWIDE;		/* Calc the relative X pixel factor */
 	Factor = Factor / (float) MAXINDEX;
 	PsychedRect.w = SDL_floorf(Factor);
@@ -587,7 +587,7 @@ void ShareWareEnd(void)
 /**********************************
 
 	Save the game
-	
+
 **********************************/
 
 Byte MachType[4] = "SDL3";
@@ -607,12 +607,12 @@ void SaveGame(void)
 	Count = 4;							/* Default length */
 	fwrite(&MachType, 1, Count, FileRef);	/* Save a machine type ID */
 	Count = sizeof(unsigned short);
-	fwrite(&MapListPtr->MaxMap, 1, Count, FileRef); 	/* Number of maps (ID) */			
-	Count = sizeof(gamestate);			
+	fwrite(&MapListPtr->MaxMap, 1, Count, FileRef); 	/* Number of maps (ID) */
+	Count = sizeof(gamestate);
 	fwrite(&gamestate, 1, Count, FileRef);		/* Save the game stats */
 	Count = sizeof(PushWallRec);
 	fwrite(&PushWallRec, 1, Count, FileRef);	/* Save the pushwall stats */
-	
+
 	Count = sizeof(nummissiles);
 	fwrite(&nummissiles, 1, Count, FileRef);	/* Save missiles in motion */
 	if (nummissiles) {
@@ -656,7 +656,7 @@ void SaveGame(void)
 	PWallWord = 0;		/* Assume no pushwall pointer in progress */
 	if (pwallseg) {
 		PWallWord = (pwallseg-(saveseg_t*)nodes)+1;		/* Convert to number offset */
-	} 
+	}
 	fwrite(&PWallWord, 1, Count, FileRef);
 	Count = MapPtr->numnodes*sizeof(savenode_t);	/* How large is the BSP tree? */
 	fwrite(nodes, 1, Count, FileRef);			/* Save it to disk */
@@ -666,8 +666,8 @@ void SaveGame(void)
 
 /**********************************
 
-	Load the game	
-	
+	Load the game
+
 **********************************/
 void *SaveRecord;
 void *SaveRecordMem;
@@ -703,9 +703,9 @@ Boolean LoadGame(void)
 	fread(FilePtr.B, 1, FileSize, FileRef);	/* Open the file */
 	fclose(FileRef);						/* Close the file */
 	if (memcmp(MachType,FilePtr.B,4)) {		/* Is this the proper machine type? */
-		goto Bogus;							
+		goto Bogus;
 	}
-	FilePtr.B+=4;							/* Index past signature */	
+	FilePtr.B+=4;							/* Index past signature */
 	if (MapListPtr->MaxMap!=*FilePtr.S) {	/* Map count the same? */
 		goto Bogus;							/* Must be differant game */
 	}
@@ -714,7 +714,7 @@ Boolean LoadGame(void)
 	SaveRecord = FilePtr.B;
 	SaveRecordMem = TheMem;
 	return TRUE;
-	
+
 Bogus:
 	FreeSomeMem(TheMem);
 BadFile:
@@ -730,15 +730,15 @@ void FinishLoadGame(void)
 		Word *W;
 		LongWord *L;
 	} FilePtr;
-	
+
 	FilePtr.B = SaveRecord;
-	
+
 	memcpy(&gamestate,FilePtr.B,sizeof(gamestate));	/* Reset the game state */
 	FilePtr.B+=sizeof(gamestate);
-	
+
 	memcpy(&PushWallRec,FilePtr.B,sizeof(PushWallRec));				/* Record for the single pushwall in progress */
 	FilePtr.B+=sizeof(PushWallRec);
-	
+
 	nummissiles = *FilePtr.W;
 	++FilePtr.W;
 	if (nummissiles) {
@@ -752,7 +752,7 @@ void FinishLoadGame(void)
 		memcpy(&actors[0],FilePtr.B,sizeof(actor_t)*numactors);
 		FilePtr.B += sizeof(actor_t)*numactors;
 	}
-	
+
 	numdoors = *FilePtr.W;
 	++FilePtr.W;
 	if (numdoors) {
@@ -770,36 +770,36 @@ void FinishLoadGame(void)
 	FilePtr.B += 64*64;
 	memcpy(&tilemap,FilePtr.B,sizeof(tilemap));						/* Tile map */
 	FilePtr.B += sizeof(tilemap);		/* Index past data */
-	
+
 	ConnectCount = *FilePtr.W;		/* Number of valid interconnects */
-	FilePtr.W++;				
+	FilePtr.W++;
 	if (ConnectCount) {
 		memcpy(areaconnect,FilePtr.B,sizeof(connect_t)*ConnectCount);	/* Is this area mated with another? */
 		FilePtr.B+= sizeof(connect_t)*ConnectCount;
-	}	
+	}
 	memcpy(areabyplayer,FilePtr.B,sizeof(areabyplayer));
 	FilePtr.B+=sizeof(areabyplayer);	/* Which areas can I see into? */
-	
+
 	memcpy(&textures[0],FilePtr.B,(128+5)*64);
 	FilePtr.B+=((128+5)*64);				/* Texture array for pushwalls */
-	
+
 	pwallseg = 0;			/* Assume bogus */
 	if (*FilePtr.W) {
 		pwallseg = (saveseg_t *)nodes;
 		pwallseg = &pwallseg[*FilePtr.W-1];
 	}
 	++FilePtr.W;
-	memcpy(nodes,FilePtr.B,MapPtr->numnodes*sizeof(savenode_t)); 
+	memcpy(nodes,FilePtr.B,MapPtr->numnodes*sizeof(savenode_t));
 /*	FilePtr.B+=(MapPtr->numnodes*sizeof(savenode_t));	*//* Next entry */
-	
+
 	FreeSomeMem(SaveRecordMem);
 }
 
 /**********************************
 
-	Show the standard file dialog 
+	Show the standard file dialog
 	for opening a new game
-		
+
 **********************************/
 
 static SDL_Mutex *DialogMutex = NULL;
@@ -831,9 +831,9 @@ Boolean ChooseLoadGame(void)
 
 /**********************************
 
-	Show the standard file dialog 
+	Show the standard file dialog
 	for saving a new game
-		
+
 **********************************/
 
 Boolean ChooseSaveGame(void)
@@ -846,4 +846,3 @@ Boolean ChooseSaveGame(void)
 	SDL_UnlockMutex(DialogMutex);
 	return DialogCancel;
 }
-

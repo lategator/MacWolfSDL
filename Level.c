@@ -222,10 +222,10 @@ TI_GETABLE			/*S_MISSILES */
 **********************************/
 
 void SpawnStatic(Word x,Word y,Word shape)
-{	
+{
 	Word *TilePtr;
 	static_t *StatPtr;
-	
+
 	if (numstatics>=MAXSTATICS) {
 		return;				/* Oh oh!! */
 	}
@@ -280,7 +280,7 @@ void SpawnStand(Word x,Word y,class_t which)
 	actor_t *ActorPtr;
 	Word *TilePtr;
 	Word tile;
-	
+
 	if (numactors==MAXACTORS) {	/* Too many actors already? */
 		return;					/* Exit */
 	}
@@ -291,7 +291,7 @@ void SpawnStand(Word x,Word y,class_t which)
 	ActorPtr = &actors[numactors];	/* Get the pointer to the new actor entry */
 	TilePtr = &tilemap[y][x];	/* Pointer to the current tile */
 	tile = TilePtr[0];			/* What's in the tile? */
-	
+
 	ActorPtr->x = (x<<FRACBITS)+0x80;	/* Init the x and y */
 	ActorPtr->y = (y<<FRACBITS)+0x80;
 	ActorPtr->pic = states[state].shapenum;	/* What picture to display? */
@@ -323,7 +323,7 @@ void SpawnStand(Word x,Word y,class_t which)
 void SpawnAmbush(Word x,Word y,class_t which)
 {
 	actor_t *ActorPtr;
-	
+
 	ActorPtr = &actors[numactors];	/* Get the pointer to the new actor entry */
 	SpawnStand(x,y,which);		/* Fill in all the entries */
 	ActorPtr->flags |= FL_AMBUSH;	/* Set the ambush flag */
@@ -339,14 +339,14 @@ void SpawnDoor(Word x,Word y,Word type)
 {
 	door_t *door;
 	Word *TilePtr;
-	
+
 	if (numdoors==MAXDOORS) {
 		return;
 	}
-	
+
 	TilePtr = &tilemap[y-1][x];	/* Pointer to the tile (-1 y) for door->area index */
 	door = &doors[numdoors];	/* Pointer to the door record */
-	
+
 	door->position = 0;		/* doors start out fully closed*/
 	door->tilex	= x;
 	door->tiley	= y;
@@ -446,7 +446,7 @@ void SpawnSecret(Word x,Word y)
 
 	Spawn all actors and mark down special places
 	A spawn record is (x,y,type)
-	
+
 **********************************/
 
 void SpawnThings(void)
@@ -456,7 +456,7 @@ void SpawnThings(void)
 	Byte *spawn_p;
 	Word Count;		/* Number of items to create */
 	Word *EnemyPtr;
-	
+
 	memset(EnemyHits,0,sizeof(EnemyHits));
 	spawn_p = (Byte *)MapPtr+MapPtr->spawnlistofs;	/* Point to the spawn table */
 	Count = MapPtr->numspawn;		/* How many items to spawn? */
@@ -494,7 +494,7 @@ void SpawnThings(void)
 		} else if (type<126) {		/* 123-125 */
 			continue;
 		} else if (type<140) {		/* 126-139 */
-			SpawnAmbush(x,y,(class_t) (type-126));	
+			SpawnAmbush(x,y,(class_t) (type-126));
 		}
 	} while (--Count);
 	Count = 0;
@@ -513,7 +513,7 @@ void SpawnThings(void)
 /**********************************
 
 	Release the map data
-		
+
 **********************************/
 
 void ReleaseMap(void)
@@ -543,10 +543,10 @@ void ReleaseMap(void)
 /**********************************
 
 	Load and initialize everything for current game level
-	
+
 	Spawnlist 0-(numusable-1) are the usable (door/pushwall) spawn objects
 	Polysegs 0-(numpushwalls-1) are four sided pushwall segs
-	
+
 **********************************/
 
 Boolean SetupGameLevel(void)
@@ -555,7 +555,7 @@ Boolean SetupGameLevel(void)
 	Word *dest;
 	Word tile;
 	Word Count;
-	
+
 /* clear counts*/
 
 	gamestate.secrettotal=0;		/* No secret items found */
@@ -582,14 +582,14 @@ Boolean SetupGameLevel(void)
 	numdoors = 0;		/* Clear out the door array */
 	numactors = 1;		/* player has spot 0*/
 	nummissiles = 0;	/* Clear out the missile array */
-	
+
 /* expand the byte width map to word width*/
 
 	memset(WallHits,0,sizeof(WallHits));
 	src = &MapPtr->tilemap[0][0];
 	dest = &tilemap[0][0];
 	Count = 0;
-	do {	
+	do {
 		tile = src[Count];		/* Get the byte tile */
 		if (tile & TI_BLOCKMOVE) {
 			tile |= TI_BLOCKSIGHT;	/* Mark as blocking my sight */
@@ -598,7 +598,7 @@ Boolean SetupGameLevel(void)
 		dest[Count] = tile;		/* Save the new tile */
 	} while (++Count<MAPSIZE*MAPSIZE);
 
-	
+
 /* let the rendering engine know about the new map*/
 
 	NewMap();		/* Set the variables */
@@ -606,9 +606,9 @@ Boolean SetupGameLevel(void)
 	if (!LoadWallArt()) {	/* Get the wall shapes */
 		return FALSE;
 	}
-/* map.tilemap is now used to hold actor numbers if the TI_ACTOR bit is set in 
+/* map.tilemap is now used to hold actor numbers if the TI_ACTOR bit is set in
 	the word tilemap*/
-	
+
 	memset(WallHits,0,sizeof(WallHits));	/* Init the wall table */
 	Count = 1;
 	do {
@@ -630,7 +630,7 @@ static Boolean LoadWallShape(Word Index,Byte *DarkPtr)
 	Byte *Buffer;
 	Word WallVal;
 	Word j;
-	
+
 	Buffer = AllocSomeMem(0x4000);		/* Get memory for wall */
 	if (!Buffer) {
 		return FALSE;
@@ -665,7 +665,7 @@ Word LoadWallArt(void)
 	Word j;
 	Word RetVal;
 	Byte *DarkPtr;
-	
+
 	RetVal = FALSE;
 	DarkPtr = LoadAResource(MyDarkData);		/* Get my darken table */
 	i = 0;
@@ -677,7 +677,7 @@ Word LoadWallArt(void)
 				goto Abort;
 			}
 			DrawPsyched(j+2);
-		} 
+		}
 	} while (++i<29);
 	i = 59;
 	do {
@@ -704,7 +704,7 @@ Word LoadSpriteArt(void)
 	Word Length;
 	Byte *MyPtr;
 	Byte *MyNewPtr;
-	
+
 	i=1;
 	do {
 		if (WallHits[i]) {
@@ -716,7 +716,7 @@ Word LoadSpriteArt(void)
 			Length |= MyPtr[1]<<8;
 			MyNewPtr = (Byte *)AllocSomeMem(Length);		/* Get memory for the sprite */
 			if (!MyNewPtr) {
-				ReleaseAResource(i+(428-1));	
+				ReleaseAResource(i+(428-1));
 				return FALSE;
 			}
 			DLZSS(MyNewPtr,&MyPtr[2],Length);	/* Unpack it */

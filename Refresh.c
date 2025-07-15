@@ -43,7 +43,7 @@ fixed_t	FixedDiv (fixed_t a, fixed_t b)
 /**********************************
 
 	Return the x coord for a sprite
-	
+
 **********************************/
 
 fixed_t R_TransformX(fixed_t x,fixed_t y)
@@ -57,7 +57,7 @@ fixed_t R_TransformX(fixed_t x,fixed_t y)
 /**********************************
 
 	Return the scale factor for a sprite
-	
+
 **********************************/
 
 fixed_t R_TransformZ(fixed_t x,fixed_t y)
@@ -71,7 +71,7 @@ fixed_t R_TransformZ(fixed_t x,fixed_t y)
 /**********************************
 
 	Return the scale factor from a 64k range angle
-	
+
 **********************************/
 
 Word ScaleFromGlobalAngle(short visangle,short distance)
@@ -80,13 +80,13 @@ Word ScaleFromGlobalAngle(short visangle,short distance)
 
 	Word anglea, angleb;
 	Word sinea, sineb;
-	
+
 	visangle >>= ANGLETOFINESHIFT;
 	anglea = (FINEANGLES/4 + (visangle-centerangle))&(FINEANGLES/2-1);
 	angleb = (FINEANGLES/4 + (visangle-normalangle))&(FINEANGLES/2-1);
 	sinea = finesine[anglea];	/* bothe sines are always positive*/
 	sineb = finesine[angleb];
-	
+
 	tz = ((int32_t)distance * sinea) / sineb;
 
 	if (tz < 0)
@@ -99,7 +99,7 @@ Word ScaleFromGlobalAngle(short visangle,short distance)
 /**********************************
 
 	The automap has to be done in quadrants for various reasons
-	
+
 **********************************/
 
 void DrawAutomap(Word tx,Word ty)
@@ -110,7 +110,7 @@ void DrawAutomap(Word tx,Word ty)
 	Word min,max;
 	Word maxtx, maxty;
 	Word NodeCount;
-	
+
 	NodeCount = MapPtr->numnodes;
 	maxtx = tx+(SCREENWIDTH/16);
 	maxty = ty+(SCREENHEIGHT/16);
@@ -120,7 +120,7 @@ void DrawAutomap(Word tx,Word ty)
 		if ( (seg->dir & (DIR_SEGFLAG|DIR_SEENFLAG)) == (DIR_SEGFLAG|DIR_SEENFLAG) ) {
 			min = (seg->min-1)>>1;
 			max = (seg->max+3)>>1;
-		
+
 			switch (seg->dir&3) {
 			case di_north:
 				x = (seg->plane-1)>>1;
@@ -147,7 +147,7 @@ void DrawAutomap(Word tx,Word ty)
 				ystep = 0;
 				break;
 			}
-		
+
 			for (count=max-min ; count ; --count,x+=xstep,y+=ystep) {
 				if (x < tx || x >= maxtx || y < ty || y>=maxty) {
 					continue;
@@ -166,12 +166,12 @@ void DrawAutomap(Word tx,Word ty)
 					if (! (tile&0x80) ) {
 						continue;		/* not a solid tile*/
 					}
-					tile = textures[y][x]; 
+					tile = textures[y][x];
 				}
 				DrawSmall(x-tx,y-ty,tile);	/* Draw the tile on the screen */
-			}	
+			}
 		}
-		++seg;	
+		++seg;
 	} while (++i<NodeCount);
 	x = viewx>>8;
 	y = viewy>>8;
@@ -184,7 +184,7 @@ void DrawAutomap(Word tx,Word ty)
 /**********************************
 
 	Init my math tables for the current view
-	
+
 **********************************/
 
 #define	PI	3.141592657
@@ -205,14 +205,14 @@ Boolean StartupRendering(Word NewSize)
 	if (NewSize == MathSize) {	/* Already loaded? */
 		return TRUE;
 	}
-	
+
 #if 1		/* Only the mac version will calculate the tables */
 
 /* generate scaleatz*/
 
 	ScalePtr = scaleatzptr;
-	minz = PROJECTIONSCALE/MAXFRAC;		/* What's the largest index */		
-	for (j=0;j<=minz;j++) {				
+	minz = PROJECTIONSCALE/MAXFRAC;		/* What's the largest index */
+	for (j=0;j<=minz;j++) {
 		ScalePtr[j] = MAXFRAC;		/* Fill in the overflow area (No longs) */
 	}
 	do {					/* Calculate the rest */
@@ -235,9 +235,9 @@ Boolean StartupRendering(Word NewSize)
 			}
 			finetangent[i] = t;
 		} while (++i<FINEANGLES/2);
-	
+
 /* finesine table*/
-		
+
 		i = 0;
 		do {
 			a = (i+0.0)*PI*2/FINEANGLES;
@@ -291,7 +291,7 @@ Boolean StartupRendering(Word NewSize)
 			viewangletox[i] = SCREENWIDTH;
 		}
 	}
-	
+
 #if 0		/* Should I save these tables? */
 if (!NewSize) {
 SaveJunk(scaleatzptr,sizeof(Word)*MAXZ);
@@ -302,7 +302,7 @@ SaveJunk(xtoviewangle,sizeof(short)*(SCREENWIDTH+1));
 GoodBye();
 }
 #endif
-	
+
 #else
 /* All other versions load the tables from disk (MUCH FASTER!!) */
 	if (MathSize==-1) {
@@ -316,7 +316,7 @@ GoodBye();
 
 	clipshortangle = xtoviewangle[0]<<ANGLETOFINESHIFT;	/* Save leftmost angle for view */
 	clipshortangle2 = clipshortangle*2;					/* Double the angle for constant */
-	
+
 /* textures for doors stay the same across maps*/
 
 	memset(textures[128],DOORPIC+4,MAPSIZE); /* door side*/
@@ -335,7 +335,7 @@ GoodBye();
 /**********************************
 
 	Alert the rendering engine about a new map
-	
+
 **********************************/
 
 void NewMap(void)
@@ -360,7 +360,7 @@ void NewMap(void)
 			}
 		} while (++x<MAPSIZE);
 	} while (++y<MAPSIZE);
-	
+
 	nodes = (savenode_t *)((Byte *)MapPtr + MapPtr->nodelistofs);
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 	y = MapPtr->numnodes;
@@ -372,16 +372,16 @@ void NewMap(void)
 		}
 		++FixPtr;
 		--y;
-	}	
+	}
 #endif
 	pwallseg = 0;		/* No pushwalls in progress */
-	
+
 }
 
 /**********************************
 
 	Set up my pushwall record so the BSP records will follow
-	
+
 **********************************/
 
 void StartPushWall(void)
@@ -391,7 +391,7 @@ void StartPushWall(void)
 	saveseg_t *SavePtr;				/* Temp pointer */
 
 	pwallseg = 0;	/* No pushwalls in progress */
-			
+
 	switch (PushWallRec.pwalldir) {	/* Which direction? */
 	case CD_NORTH:
 		segmin = PushWallRec.pwallx<<1;	/* Minimum segment */
@@ -413,7 +413,7 @@ void StartPushWall(void)
 		segmin = PushWallRec.pwally<<1;
 		segdir = di_north;	/* Point north */
 	}
-	
+
 	SavePtr = (saveseg_t *)nodes;	/* Init pointer to the nodes */
 	i = MapPtr->numnodes;		/* Get the node count */
 	if (i) {				/* Maps MUST have nodes */
@@ -433,7 +433,7 @@ void StartPushWall(void)
 /**********************************
 
 	Mark a pushwall BSP segment as disabled
-	
+
 **********************************/
 
 void AdvancePushWall(void)
@@ -446,31 +446,31 @@ void AdvancePushWall(void)
 /**********************************
 
 	Render the entire 3-D view
-	
+
 **********************************/
 
 void RenderView(void)
 {
 
 	Word frame;
-	
+
 	centerangle = gamestate.viewangle<<GAMEANGLETOFINE;	/* 512 to 2048 */
 	centershort = centerangle<<ANGLETOFINESHIFT;	/* 2048 to 64k */
 	viewsin = sintable[gamestate.viewangle];	/* Get the basic sine */
 	viewcos = costable[gamestate.viewangle];	/* Get the basic cosine */
 	memset(areavis, 0, sizeof(areavis));	/* No areas are visible */
-	ClearClipSegs();			/* Clip first seg only to sides of screen */	
+	ClearClipSegs();			/* Clip first seg only to sides of screen */
 	IO_ClearViewBuffer();		/* Erase to ceiling / floor colors*/
-	
+
 	bspcoord[BSPTOP] = 0;		/* The map is 64*64 */
 	bspcoord[BSPBOTTOM] = 64*FRACUNIT;
 	bspcoord[BSPLEFT] = 0;
 	bspcoord[BSPRIGHT] = 64*FRACUNIT;
-	
+
 	RenderBSPNode(0);		/* traverse the BSP tree from the root */
 	DrawSprites();			/* sort all the sprites in any of the rendered areas*/
 	DrawTopSprite();		/* draw game over sprite on top of everything*/
-	
+
 	if (!NoWeaponDraw) {	/* Don't draw the weapon? */
 		frame = gamestate.attackframe;
 		if (frame == 4) {

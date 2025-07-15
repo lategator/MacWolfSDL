@@ -17,22 +17,22 @@ static Word checkcoord[11][4] = {	/* Indexs to the bspcoord table */
 /**********************************
 
 	Draw a 3-D textured polygon, must be done FAST!
-		
+
 **********************************/
 
 void RenderWallLoop(Word x1,Word x2,Word distance)
 {
 	fixed_t	texturecolumn;
 	Word tile,scaler, angle;
-	
+
 /* calculate and draw each column */
-	
+
 	if (rw_downside) {
 		while (x1 < x2) {		/* Time to draw? */
 			scaler = rw_scale >> FRACBITS;		/* Get the draw scale */
 			xscale[x1] = scaler;		/* Save the scale factor */
 			angle = xtoviewangle[x1]+rw_centerangle;
-			texturecolumn = rw_midpoint - SUFixedMul(finetangent[angle],distance);	/* Which texture to use? */	
+			texturecolumn = rw_midpoint - SUFixedMul(finetangent[angle],distance);	/* Which texture to use? */
 			if ((Word)texturecolumn < rw_mintex) {
 				texturecolumn = rw_mintex;
 			} else if ((Word)texturecolumn >= rw_maxtex) {
@@ -87,7 +87,7 @@ void RenderWallRange (Word start,Word stop,saveseg_t *seg,Word distance)
 
 	seg->dir |= DIR_SEENFLAG;		/* for automap*/
 	areavis[seg->area] = 1;			/* for sprite drawing*/
-	
+
 	start -= ANGLE180;		/* Adjust the start angle */
 	stop -= ANGLE180;		/* Adjust the stop angle */
 	vangle = (Word)(start+ANGLE90)>>ANGLETOFINESHIFT;
@@ -128,7 +128,7 @@ screenpost_t solidsegs[MAXSEGS], *newend;	/* newend is one past the last valid s
 void ClipWallSegment(Word top,Word bottom,saveseg_t *seg,Word distance)
 {
 	screenpost_t *next, *start;
-	
+
 /* find the first clippost that touches the source post (adjacent pixels are touching)*/
 	start = solidsegs;
 	while (start->bottom > top+1) {
@@ -148,15 +148,15 @@ void ClipWallSegment(Word top,Word bottom,saveseg_t *seg,Word distance)
 			next->bottom = bottom;
 			return;
 		}
-		
+
 	/* there is a fragment above *start*/
 		RenderWallRange (top, start->top + 1,seg,distance);
 		start->top = top;		/* adjust the clip size*/
 	}
-	
+
 	if (bottom >= start->bottom)
 		return;			/* bottom contained in start*/
-		
+
 	next = start;
 	while (bottom <= (next+1)->top+1) {
 		/* there is a fragment between two posts*/
@@ -167,12 +167,12 @@ void ClipWallSegment(Word top,Word bottom,saveseg_t *seg,Word distance)
 			goto crunch;
 		}
 	}
-	
+
 	/* there is a fragment after *next*/
 	RenderWallRange (next->bottom - 1, bottom,seg,distance);
 	start->bottom = bottom;		/* adjust the clip size*/
-	
-	
+
+
 /* remove start+1 to next from the clip list, because start now covers their area*/
 crunch:
 	if (next == start) {
@@ -187,7 +187,7 @@ crunch:
 
 	Clear out the edge segments for the ray cast
 	(Assume full viewing angle)
-	
+
 **********************************/
 
 void ClearClipSegs(void)
@@ -202,7 +202,7 @@ void ClearClipSegs(void)
 /**********************************
 
 	Clip and draw a given wall segment
-		
+
 **********************************/
 
 void P_DrawSeg (saveseg_t *seg)
@@ -214,7 +214,7 @@ void P_DrawSeg (saveseg_t *seg)
 	unsigned short	angle1, angle2;
 	int		texslide;
 	int		distance;
-	
+
 	if (seg->dir & DIR_DISABLEDFLAG) {	/* Segment shut down? */
 		return;		/* pushwall part*/
 	}
@@ -222,7 +222,7 @@ void P_DrawSeg (saveseg_t *seg)
 	segplane = (Word)seg->plane << 7;
 	rw_mintex = (Word)seg->min << 7;
 	rw_maxtex = (Word)seg->max << 7;
-	
+
 /* adjust pushwall segs */
 
 	if (seg == pwallseg) {		/* Is this the active pushwall? */
@@ -232,7 +232,7 @@ void P_DrawSeg (saveseg_t *seg)
 			segplane += PushWallRec.pwallxchange;
 		}
 	}
-	
+
 /* get texture*/
 
 	if (seg->texture >= 129) {	/* segment is a door */
@@ -245,7 +245,7 @@ void P_DrawSeg (saveseg_t *seg)
 		texslide = 0;
 		rw_texture = &textures[seg->texture][0];
 	}
-	
+
 	switch (seg->dir&3) {	/* mask off the flags*/
 	case di_north:
 		distance = viewx - segplane;
@@ -302,7 +302,7 @@ void P_DrawSeg (saveseg_t *seg)
 	angle1 -= centershort;
 	angle2 -= centershort;
 	++angle2;	/* make angle 2 non inclusive*/
-	
+
 	tspan = angle1 + clipshortangle;
 	if (tspan > clipshortangle2) {
 		tspan -= clipshortangle2;
@@ -327,10 +327,10 @@ void P_DrawSeg (saveseg_t *seg)
 		rw_centerangle -= FINEANGLES;
 	}
 	rw_centerangle += FINEANGLES/4;
-	
+
 	rw_midpoint -= texslide;
 	rw_mintex -= texslide;
-	
+
 	angle1 += ANGLE180;		/* adjust so angles are unsigned*/
 	angle2 += ANGLE180;
 	ClipWallSegment(angle1, angle2,seg,distance);
@@ -339,7 +339,7 @@ void P_DrawSeg (saveseg_t *seg)
 /**********************************
 
 	Returns True if some part of the BSP dividing line might be visible
-		
+
 **********************************/
 
 Boolean CheckBSPNode(Word boxpos)
@@ -350,16 +350,16 @@ Boolean CheckBSPNode(Word boxpos)
 	screenpost_t	*start;
 	Word *PosPtr;
 	int x1,y1,x2,y2;
-	
+
 	PosPtr = &checkcoord[boxpos][0];
 	x1 = bspcoord[PosPtr[0]];
 	y1 = bspcoord[PosPtr[1]];
 	x2 = bspcoord[PosPtr[2]];
 	y2 = bspcoord[PosPtr[3]];
-	
+
 	angle1 = PointToAngle(x1,y1) - centershort;
 	angle2 = PointToAngle(x2,y2) - centershort;
-	
+
 /* check clip list for an open space */
 
 	span = angle1 - angle2;
@@ -401,7 +401,7 @@ Boolean CheckBSPNode(Word boxpos)
 /**********************************
 
 	Draw one or more wall segments
-		
+
 **********************************/
 
 void TerminalNode (saveseg_t *seg)
@@ -418,7 +418,7 @@ void TerminalNode (saveseg_t *seg)
 /**********************************
 
 	Render the 3D view by recursivly following the BSP tree
-	
+
 **********************************/
 
 void RenderBSPNode(Word bspnum)
@@ -431,15 +431,15 @@ void RenderBSPNode(Word bspnum)
 	Word boxpos;		/* Index to the coord table */
 
 	bsp = &nodes[bspnum];		/* Get pointer to the current tree node */
-	if (bsp->dir & DIR_SEGFLAG) {		/* There is a segment here... */	
+	if (bsp->dir & DIR_SEGFLAG) {		/* There is a segment here... */
 		TerminalNode((saveseg_t *)bsp);	/* Render it */
 		return;							/* Exit */
 	}
-	
+
 /* decision node */
 
 	coordinate = bsp->plane<<7;		/* stored as half tiles*/
-	
+
 	if (bsp->dir) {					/* True for vertical tiles */
 		side = viewx > coordinate;	/* vertical decision line*/
 		savednum = BSPLEFT + (side^1);	/* Left or right */
@@ -447,7 +447,7 @@ void RenderBSPNode(Word bspnum)
 		side = viewy > coordinate;	/* horizontal decision line*/
 		savednum = BSPTOP + (side^1);	/* Top or bottom */
 	}
-	
+
 	savedcoordinate = bspcoord[savednum];	/* Save this coord */
 	bspcoord[savednum] = coordinate;		/* Set my new coord boundary */
 	RenderBSPNode(bsp->children[side^1]);	/* recursively divide front space*/
@@ -456,11 +456,11 @@ void RenderBSPNode(Word bspnum)
 	savednum ^= 1;							/* Negate the index */
 	savedcoordinate = bspcoord[savednum];	/* Save the other side */
 	bspcoord[savednum] = coordinate;		/* Set the new side */
-	
+
 /* if the back side node is a single seg, don't bother explicitly checking visibility */
 
 	if ( ! ( nodes[bsp->children[side]].dir & DIR_LASTSEGFLAG ) ) {
-	
+
 	/* don't flow into the back space if it is not going to be visible */
 
 		if (viewx <= bspcoord[BSPLEFT]) {

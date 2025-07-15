@@ -4,17 +4,17 @@
 
 	Do damage to the player and show the killer
 	if you die.
-		
+
 **********************************/
 
 void TakeDamage(Word points,Word x,Word y)
 {
 	int angle;
-	
+
 	if (gamestate.godmode) {					/* Don't do anything else if a god */
 		return;
 	}
-		
+
 	if (gamestate.health <= points) {	/* Died? */
 		playstate = EX_DIED;		/* Kill off the player */
 		gamestate.health = 0;		/* No health */
@@ -53,7 +53,7 @@ void TakeDamage(Word points,Word x,Word y)
 /**********************************
 
 	Heal the player
-		
+
 **********************************/
 
 void HealSelf(Word points)
@@ -74,7 +74,7 @@ void HealSelf(Word points)
 /**********************************
 
 	Award a free life
-		
+
 **********************************/
 
 void GiveExtraMan(void)
@@ -90,7 +90,7 @@ void GiveExtraMan(void)
 
 	Award some score to the player and give
 	free lives if enough points have been accumulated
-		
+
 **********************************/
 
 void GivePoints(LongWord points)
@@ -107,7 +107,7 @@ void GivePoints(LongWord points)
 
 	Award some score to the player and give
 	free lives if enough points have been accumulated
-		
+
 **********************************/
 
 void GiveTreasure(void)
@@ -124,7 +124,7 @@ void GiveTreasure(void)
 
 	Award a new weapon, use it if better than what
 	the player already has.
-		
+
 **********************************/
 
 void GiveWeapon(weapontype weapon)
@@ -137,7 +137,7 @@ void GiveWeapon(weapontype weapon)
 /**********************************
 
 	Award some ammo, rearm weapon if knife was the current weapon
-		
+
 **********************************/
 
 void GiveAmmo(Word ammo)
@@ -171,7 +171,7 @@ void GiveAmmo(Word ammo)
 /**********************************
 
 	Award some gasoline, rearm flamethrower if knife was the current weapon
-		
+
 **********************************/
 
 void GiveGas(Word ammo)
@@ -188,7 +188,7 @@ void GiveGas(Word ammo)
 /**********************************
 
 	Award some rockets, rearm missile launcher if knife was the current weapon
-		
+
 **********************************/
 
 void GiveMissile(Word ammo)
@@ -205,7 +205,7 @@ void GiveMissile(Word ammo)
 /**********************************
 
 	Award a key
-		
+
 **********************************/
 
 void GiveKey(Word key)
@@ -217,7 +217,7 @@ void GiveKey(Word key)
 /**********************************
 
 	Play a sound for a bonus item
-		
+
 **********************************/
 
 void BonusSound(void)
@@ -228,7 +228,7 @@ void BonusSound(void)
 /**********************************
 
 	Play a sound for getting a weapon
-		
+
 **********************************/
 
 void WeaponSound(void)
@@ -239,7 +239,7 @@ void WeaponSound(void)
 /**********************************
 
 	Play a sound for getting more health
-		
+
 **********************************/
 
 void HealthSound(void)
@@ -250,7 +250,7 @@ void HealthSound(void)
 /**********************************
 
 	Play a sound for getting a key
-		
+
 **********************************/
 
 void KeySound(void)
@@ -261,9 +261,9 @@ void KeySound(void)
 /**********************************
 
 	Picks up the bonus item at mapx,mapy. It is possible to
-	have multiple items in a single tile, and they may 
+	have multiple items in a single tile, and they may
 	not all get picked up (maxed out)
-		
+
 **********************************/
 
 void GetBonus(Word x,Word y)
@@ -273,13 +273,13 @@ void GetBonus(Word x,Word y)
 	Word touched;			/* Number of items touched */
 	Word got;				/* Number of items taken */
 	Word Truex,Truey;		/* x,y in pixels */
-	
+
 	Count = numstatics;/* Init the count */
 	if (!Count) {	/* No items at all? */
 		goto EndNow;	/* Leave NOW! */
 	}
 	touched = 0;		/* No items are marked */
-	got = 0;			/* No items found */	
+	got = 0;			/* No items found */
 	StaticPtr = statics;	/* Init the main index */
 	Truex=x<<FRACBITS;		/* Convert x,y to pixel offsets */
 	Truey=y<<FRACBITS;
@@ -289,7 +289,7 @@ void GetBonus(Word x,Word y)
 		}
 		++touched;			/* Found one! */
 		++got;				/* Assume I picked it up */
-		
+
 		switch (StaticPtr->pic) {	/* Do the proper action */
 		case S_HEALTH:
 			if (!gamestate.godmode && gamestate.health == 100) {
@@ -298,13 +298,13 @@ void GetBonus(Word x,Word y)
 			HealthSound();		/* Add health */
 			HealSelf(25);		/* 25 HP's better */
 			break;
-	
+
 		case S_G_KEY:
 		case S_S_KEY:
 			GiveKey(StaticPtr->pic - S_G_KEY);	/* Award the key */
 			KeySound();							/* Key sound */
 			break;
-	
+
 		case S_CROSS:
 		case S_CHALICE:
 		case S_CHEST:
@@ -313,7 +313,7 @@ void GetBonus(Word x,Word y)
 			GiveTreasure();				/* Award treasure points */
 			++gamestate.treasurecount;	/* +1 treasure found */
 			break;
-	
+
 		case S_AMMO:
 			if (!gamestate.godmode && gamestate.ammo == gamestate.maxammo) {	/* Ammo full? */
 				goto KillGot;			/* Abort */
@@ -321,7 +321,7 @@ void GetBonus(Word x,Word y)
 			WeaponSound();			/* Tah dah! */
 			GiveAmmo(5);			/* 5 bullets */
 			break;
-	
+
 		case S_MISSILES:
 			if (!gamestate.godmode && gamestate.missiles == 99) {	/* Missiles full? */
 				goto KillGot;		/* Abort */
@@ -329,7 +329,7 @@ void GetBonus(Word x,Word y)
 			WeaponSound();			/* Get ammo sound */
 			GiveMissile(5);			/* Award 5 missiles */
 			break;
-	
+
 		case S_GASCAN:
 			if (!gamestate.godmode && gamestate.gas == 99) {		/* Gas full? */
 				goto KillGot;		/* Abort */
@@ -337,7 +337,7 @@ void GetBonus(Word x,Word y)
 			WeaponSound();			/* Get ammo sound */
 			GiveGas(14);			/* 14 gallons of pure death */
 			break;
-	
+
 		case S_AMMOCASE:
 			if (!gamestate.godmode && gamestate.ammo == gamestate.maxammo) {	/* Ammo full */
 				goto KillGot;		/* Abort */
@@ -345,7 +345,7 @@ void GetBonus(Word x,Word y)
 			WeaponSound();			/* Award the bonus */
 			GiveAmmo(25);			/* Give 25 bullets */
 			break;
-	
+
 		case S_MACHINEGUN:
 			if (!gamestate.godmode && gamestate.machinegun && gamestate.ammo == gamestate.maxammo) {
 				goto KillGot;
@@ -357,7 +357,7 @@ void GetBonus(Word x,Word y)
 			}
 			WeaponSound();			/* Got a gun! */
 			break;
-			
+
 		case S_CHAINGUN:
 			GiveAmmo(20);
 			if (!gamestate.chaingun) {
@@ -369,7 +369,7 @@ IAmSoHappy:
 			IO_DrawFace(4);			/* Make a happy face! */
 			facecount = 120;			/* Hold for 2 seconds */
 			break;
-	
+
 		case S_FLAMETHROWER:
 			if (!gamestate.flamethrower) {
 				gamestate.flamethrower = TRUE;	/* Make flame thrower permanent */
@@ -377,7 +377,7 @@ IAmSoHappy:
 			}
 			GiveGas(20);					/* Start with 20 gallons */
 			goto IAmSoHappy;				/* Yeah! */
-	
+
 		case S_LAUNCHER:
 			if (!gamestate.missile) {
 				gamestate.missile = TRUE;		/* Make missile launcher permanent */
@@ -385,13 +385,13 @@ IAmSoHappy:
 			}
 			GiveMissile(5);					/* Start with 5 missiles */
 			goto IAmSoHappy;				/* He he he */
-	
+
 		case S_ONEUP:
 			HealSelf(99);					/* Fully heal */
 			GiveExtraMan();					/* Give a free man */
-			++gamestate.treasurecount;		/* I got a treasure */	
+			++gamestate.treasurecount;		/* I got a treasure */
 			break;
-	
+
 		case S_FOOD:
 			if (!gamestate.godmode && gamestate.health == 100) {	/* Full health? */
 				goto KillGot;			/* Don't get it */
@@ -399,7 +399,7 @@ IAmSoHappy:
 			HealthSound();		/* Feel's good! */
 			HealSelf(10);		/* Add 10 points */
 			break;
-	
+
 		case S_DOG_FOOD:
 			if (!gamestate.godmode && gamestate.health == 100) {	/* Full health? */
 				goto KillGot;		/* Abort */
@@ -407,7 +407,7 @@ IAmSoHappy:
 			PlaySound(SND_DOGBARK);	/* Get a bonus */
 			HealSelf(4);	/* Not much extra health */
 			break;
-	
+
 		case S_BANDOLIER:
 			if (gamestate.maxammo < 299) {	/* Maximum ammo */
 				gamestate.maxammo += 100;	/* More ammo! */
@@ -416,14 +416,14 @@ IAmSoHappy:
 			GiveAmmo(20);	/* Award ammo */
 			GiveGas(2);
 			GiveMissile(5);
-			break;	
-					
+			break;
+
 		default:
 			touched--;		/* Huh? */
 			goto KillGot;	/* Can happen if a bonus item is dropped on a scenery pic */
 		}
 	/* remove the static object */
-	
+
 		--numstatics;		/* One less item */
 		StaticPtr[0] = statics[numstatics];	/* Copy the last item */
 		goto SkipInc;		/* Process this entry again! */
@@ -435,9 +435,7 @@ SkipInc:;
 	} while (--Count);
 
 	if (touched == got) {	/* All items taken? */
-EndNow:						
+EndNow:
 		tilemap[y][x] &= ~TI_GETABLE;		/* No more getable items */
 	}
 }
-
-

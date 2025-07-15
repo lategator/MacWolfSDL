@@ -39,18 +39,18 @@ void PlaceItemType(Word shape,actor_t *ActorPtr)
 
 	Kill an actor
 	Also drop off any items you can get from a dead guy.
-	
+
 **********************************/
 
 void KillActor(actor_t *ActorPtr)
 {
 	Word x,y;
-	
+
 	GivePoints(classinfo[ActorPtr->class].points);	/* Award the score */
 	switch(ActorPtr->class) {	/* Drop anything special? */
 	case CL_SS:
 		PlaceItemType(S_MACHINEGUN,ActorPtr);	/* Give a gun */
-		break;	
+		break;
 	case CL_OFFICER:
 	case CL_MUTANT:
 	case CL_GUARD:
@@ -72,7 +72,7 @@ void KillActor(actor_t *ActorPtr)
 	x = ActorPtr->x >> FRACBITS;
 	y = ActorPtr->y >> FRACBITS;
 	tilemap[y][x] |= TI_BODY;	/* body flag on most apparant, no matter what */
-	NewState(ActorPtr,classinfo[ActorPtr->class].deathstate);	/* start the death animation */	
+	NewState(ActorPtr,classinfo[ActorPtr->class].deathstate);	/* start the death animation */
 }
 
 /**********************************
@@ -80,14 +80,14 @@ void KillActor(actor_t *ActorPtr)
 	Does damage points to enemy actor, either putting it into a stun frame or
 	killing it.
 	Called when an enemy is hit.
-	
+
 **********************************/
 
 static Word PainTick;
 void DamageActor(Word damage,actor_t *ActorPtr)
 {
 	stateindex_t pain;
-	
+
 	madenoise = TRUE;	/* You made some noise! */
 
 /* do double damage if shooting a non attack mode actor*/
@@ -103,7 +103,7 @@ void DamageActor(Word damage,actor_t *ActorPtr)
 		KillActor(ActorPtr);				/* Die!! */
 		return;
 	}
-	
+
 	ActorPtr->hitpoints -= damage;		/* Remove the damage */
 	if (ActorPtr->class == CL_MECHAHITLER && ActorPtr->hitpoints <= 250 && ActorPtr->hitpoints+damage > 250) {
 	/* hitler losing armor */
@@ -116,7 +116,7 @@ void DamageActor(Word damage,actor_t *ActorPtr)
 		}
 		pain = classinfo[ActorPtr->class].painstate;	/* Do pain */
 	}
-	if (pain) {	/* some classes don't have pain frames */		
+	if (pain) {	/* some classes don't have pain frames */
 		if (ActorPtr->state != pain) {	/* Already in pain? */
 			NewState(ActorPtr,pain);
 		}
@@ -126,7 +126,7 @@ void DamageActor(Word damage,actor_t *ActorPtr)
 /**********************************
 
 	Throw a Missile at the player
-		
+
 **********************************/
 
 void A_Throw(actor_t *ActorPtr)
@@ -134,7 +134,7 @@ void A_Throw(actor_t *ActorPtr)
 	Word angle;
 	int	speed;
 	missile_t *MissilePtr;
-	
+
 	PlaySound(SND_ROCKET|0x8000);
 	MissilePtr = GetNewMissile();		/* Create a missile */
 	MissilePtr->x = ActorPtr->x;
@@ -158,7 +158,7 @@ void A_Throw(actor_t *ActorPtr)
 /**********************************
 
 	Launch a rocket at the player
-		
+
 **********************************/
 
 void A_Launch(actor_t *ActorPtr)
@@ -166,7 +166,7 @@ void A_Launch(actor_t *ActorPtr)
 	Word angle;
 	int	speed;
 	missile_t *MissilePtr;
-	
+
 	PlaySound(SND_ROCKET|0x8000);
 	MissilePtr = GetNewMissile();
 	MissilePtr->x = ActorPtr->x;
@@ -191,13 +191,13 @@ void A_Launch(actor_t *ActorPtr)
 /**********************************
 
 	Scream a death sound
-		
+
 **********************************/
 
 void A_Scream(actor_t *ActorPtr)
 {
 	Word Sound,i;
-	
+
 	Sound = classinfo[ActorPtr->class].deathsound;	/* Get the sound # */
 	if (Sound==SND_EDIE) {		/* Normal death sound? */
 		if (w_rnd()&1) {		/* Play one randomly */
@@ -214,7 +214,7 @@ void A_Scream(actor_t *ActorPtr)
 /**********************************
 
 	Body hitting the ground
-		
+
 **********************************/
 
 void A_Thud(actor_t *ActorPtr)
@@ -225,7 +225,7 @@ void A_Thud(actor_t *ActorPtr)
 /**********************************
 
 	You win the game!
-		
+
 **********************************/
 
 void A_Victory(actor_t *ActorPtr)
@@ -236,13 +236,13 @@ void A_Victory(actor_t *ActorPtr)
 /**********************************
 
 	Drop Hitler's armor and let hitler run around
-		
+
 **********************************/
 
 void A_HitlerMorph(actor_t *ActorPtr)
 {
 	missile_t *MissilePtr;
-	
+
 /* Use an inert missile for the armor remnants */
 
 	MissilePtr = GetNewMissile();
@@ -261,14 +261,14 @@ void A_HitlerMorph(actor_t *ActorPtr)
 /**********************************
 
 	Try to damage the player, based on skill level and player's speed
-		
+
 **********************************/
 
 void A_Shoot(actor_t *ActorPtr)
 {
 	Word damage;		/* Damage to inflict */
 	Word distance;
-	
+
 	if (!areabyplayer[MapPtr->areasoundnum[ActorPtr->areanumber]]) {	/* In the same area? */
 		return;
 	}
@@ -279,7 +279,7 @@ void A_Shoot(actor_t *ActorPtr)
 	} else {
 		PlaySound(SND_GUNSHT|0x8000);	/* Bang! */
 	}
-	
+
 	if (!CheckLine(ActorPtr)) {	/* Player is behind a wall*/
 		return;			/* Can't shoot! */
 	}
@@ -329,13 +329,13 @@ void A_Shoot(actor_t *ActorPtr)
 /**********************************
 
 	Bite the player
-		
+
 **********************************/
 
 void A_Bite(actor_t *ActorPtr)
 {
 	Word dmg;
-	
+
 	PlaySound(SND_DOGBARK);	/* Take a bite! */
 	if (CalcDistance(ActorPtr)<=BITERANGE) {	/* In range? */
 		switch (difficulty) {
@@ -355,14 +355,14 @@ void A_Bite(actor_t *ActorPtr)
 /**********************************
 
 	Return the distance between the player and this actor
-		
+
 **********************************/
 
 Word CalcDistance(actor_t *ActorPtr)
 {
 	Word absdx;
 	Word absdy;
-	
+
 	absdx = w_abs(ActorPtr->x - actors[0].x);
 	absdy = w_abs(ActorPtr->y - actors[0].y);
 	return (absdx > absdy) ? absdx : absdy;	/* Return the larger */
@@ -371,7 +371,7 @@ Word CalcDistance(actor_t *ActorPtr)
 /**********************************
 
 	Called every few frames to check for sighting and attacking the player
-		
+
 **********************************/
 
 Word shootchance[8] = {256,64,32,24,20,16,12,8};
@@ -380,15 +380,15 @@ void A_Target(actor_t *ActorPtr)
 {
 	Word chance;	/* % chance of hit */
 	Word distance;	/* Distance of critters */
-	
+
 	if (!areabyplayer[MapPtr->areasoundnum[ActorPtr->areanumber]] || !CheckLine(ActorPtr)) {
 		ActorPtr->flags &= ~FL_SEEPLAYER;	/* Can't see you */
 		return;
 	}
-	
+
 	ActorPtr->flags |= FL_SEEPLAYER;		/* I see you */
 	distance = CalcDistance(ActorPtr);		/* Get the distance */
-	
+
 	if (distance < BITERANGE) {	/* always attack when this close */
 		goto attack;
 	}
@@ -396,15 +396,15 @@ void A_Target(actor_t *ActorPtr)
 	if (ActorPtr->class == CL_DOG) {	/* Dogs can only bite */
 		return;
 	}
-		
-	if (ActorPtr->class == CL_SCHABBS && distance <= TILEGLOBAL*4) {	
+
+	if (ActorPtr->class == CL_SCHABBS && distance <= TILEGLOBAL*4) {
 		goto attack;		/* Dr. schabbs always attacks */
 	}
 
 	if (distance >= TILEGLOBAL*8) {		/* Too far? */
 		return;
 	}
-			
+
 	chance = shootchance[distance>>FRACBITS];	/* Get the base chance */
 	if (difficulty >= 2) {
 		chance <<= 1;		/* Increase chance */
@@ -418,7 +418,7 @@ attack:		/* go into attack frame*/
 /**********************************
 
 	MechaHitler takes a step
-		
+
 **********************************/
 
 void A_MechStep(actor_t *ActorPtr)
@@ -430,13 +430,13 @@ void A_MechStep(actor_t *ActorPtr)
 /**********************************
 
 	Chase the player
-		
+
 **********************************/
 
 void T_Chase(actor_t *ActorPtr)
 {
 	Word move;
-	
+
 /* if still centered in a tile, try to find a move */
 
 	if (ActorPtr->flags & FL_NOTMOVING) {
@@ -463,9 +463,9 @@ void T_Chase(actor_t *ActorPtr)
 			MoveActor(ActorPtr,move);	/* Move one step */
 			return;
 		}
-	
+
 		/* reached goal tile, so select another one*/
-		
+
 		move -= ActorPtr->distance;
 		MoveActor(ActorPtr,ActorPtr->distance);		/* move the last 1 to center*/
 
@@ -484,7 +484,7 @@ void T_Chase(actor_t *ActorPtr)
 
 	Move all actors for a single frame
 	Actions are performed as the state is entered
-		
+
 **********************************/
 
 typedef void (*call_t)(actor_t *ActorPtr);
@@ -517,7 +517,7 @@ void MoveActors(void)
 	Word i;		/* Index */
 	state_t *StatePtr;	/* Pointer to state logic */
 	actor_t *ActorPtr;	/* Pointer to Actor code */
-	
+
 	if (numactors<2) {	/* No actors to check? */
 		return;
 	}
@@ -537,7 +537,7 @@ void MoveActors(void)
 			StatePtr = &states[ActorPtr->state];	/* Get the new state ptr */
 			ActorPtr->ticcount = StatePtr->tictime;	/* Reset the time */
 			ActorPtr->pic = StatePtr->shapenum;		/* Set the new picture # */
-			/* action think */			
+			/* action think */
 			actioncalls[StatePtr->action](ActorPtr);	/* Call the code */
 		}
 		thinkcalls[StatePtr->think](ActorPtr);	/* Perform the action */
@@ -545,4 +545,3 @@ Skip:	/* Next entry */
 		++ActorPtr;
 	} while (++i<numactors);
 }
-

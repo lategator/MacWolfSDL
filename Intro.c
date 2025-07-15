@@ -13,7 +13,7 @@ void Intro(void)
 	LongWord *PackPtr;
 	LongWord PackLength;
 	Byte *ShapePtr;
-	
+
 	NewGameWindow(1);	/* Set to 512 mode */
 
 	FadeToBlack();		/* Fade out the video */
@@ -24,7 +24,7 @@ void Intro(void)
 	DrawShape(0,0,ShapePtr);
 	FreeSomeMem(ShapePtr);
 	ReleaseAResource(rMacPlayPic);
-	
+
 	BlastScreen();
 	StartSong(SongListPtr[0]);	/* Play the song */
 	FadeTo(rMacPlayPal);	/* Fade in the picture */
@@ -44,5 +44,5 @@ void Intro(void)
 		BlastScreen();
 		FadeTo(rYummyPal);
 		WaitTicksEvent(600);
-	}	
+	}
 }

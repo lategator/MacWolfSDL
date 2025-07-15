@@ -3,7 +3,7 @@
 /**********************************
 
 	Returns a pointer to an empty missile record
-	
+
 **********************************/
 
 missile_t *GetNewMissile(void)
@@ -21,7 +21,7 @@ missile_t *GetNewMissile(void)
 /**********************************
 
 	Explode a missile
-	
+
 **********************************/
 
 void ExplodeMissile(missile_t *MissilePtr)
@@ -45,7 +45,7 @@ void ExplodeMissile(missile_t *MissilePtr)
 
 	Take damage from the player
 	Damage is 8,16...64, pass the x,y for a kill x,y
-	
+
 **********************************/
 
 void MissileHitPlayer(missile_t *MissilePtr)
@@ -57,7 +57,7 @@ void MissileHitPlayer(missile_t *MissilePtr)
 
 	Take damage from the enemy
 	Detonate if not killed (return True)
-	
+
 **********************************/
 
 Boolean MissileHitEnemy(missile_t *MissilePtr, actor_t *ActorPtr)
@@ -75,7 +75,7 @@ Boolean MissileHitEnemy(missile_t *MissilePtr, actor_t *ActorPtr)
 /**********************************
 
 	Did the missile impact on an actor
-	
+
 **********************************/
 
 Boolean CheckMissileActorHits(missile_t *MissilePtr)
@@ -85,12 +85,12 @@ Boolean CheckMissileActorHits(missile_t *MissilePtr)
 	Word Bang;
 	Word tile;
 	actor_t *ActorPtr;
-	
+
 	Bang = 0;			/* Assume the missile is OK */
 	xl = (MissilePtr->x>>FRACBITS)-1;	/* Create the kill rect */
 	xh = xl+3;
 	y = (MissilePtr->y>>FRACBITS)-1;
-	yh = y+3;	
+	yh = y+3;
 	if (xl>=MAPSIZE) {		/* Clip the attack rect to STAY on the map! */
 		xl = 0;
 	}
@@ -122,7 +122,7 @@ Boolean CheckMissileActorHits(missile_t *MissilePtr)
 /**********************************
 
 	Move the missiles each game frame
-	
+
 **********************************/
 
 void MoveMissiles(void)
@@ -130,14 +130,14 @@ void MoveMissiles(void)
 	Word Count;		/* Current missile # */
 	missile_t *MissilePtr;	/* Pointer to missile record */
 	Word i,x,y,tile;		/* Tile position */
-	
+
 	Count = nummissiles;	/* How many active missiles? */
 	if (!Count || !TicCount) {		/* No missiles? (Or elapsed time?) */
 		return;				/* Exit now */
 	}
-	
+
 	MissilePtr = &missiles[0];	/* Init pointer to the first missile */
-	do {	
+	do {
 		if (!MissilePtr->flags) {	/* inert explosion*/
 			if (MissilePtr->type>TicCount) {	/* Time up? */
 				MissilePtr->type-=TicCount;		/* Remove some time */
@@ -145,37 +145,37 @@ void MoveMissiles(void)
 			} else {
 				--nummissiles;		/* Remove this missile */
 				MissilePtr[0] = missiles[nummissiles];	/* Copy the FINAL record here */
-			}	
+			}
 			continue;		/* Next! */
 		}
-		
+
 	/* move position*/
-	
+
 		i = TicCount;		/* How many times to try this? */
 		do {
 			MissilePtr->x += MissilePtr->xspeed;
 			MissilePtr->y += MissilePtr->yspeed;
-		
+
 	/* check for contact with player*/
-	
+
 			if (MissilePtr->flags & MF_HITPLAYER) {
 				if (w_abs(MissilePtr->x - actors[0].x) < MISSILEHITDIST
 				&& w_abs(MissilePtr->y - actors[0].y) < MISSILEHITDIST) {
 					MissileHitPlayer(MissilePtr);		/* Take damage */
 					goto BOOM;			/* Boom! */
-				}			
+				}
 			}
-		
+
 	/* check for contact with actors*/
-	
+
 			if (MissilePtr->flags & MF_HITENEMIES) {
 				if (CheckMissileActorHits(MissilePtr)) {	/* Did it detonate? */
 					goto BOOM;				/* Boom! */
 				}
 			}
-		
+
 	/* check for contact with walls and get new area */
-	
+
 			x = MissilePtr->x >> FRACBITS;
 			y = MissilePtr->y >> FRACBITS;
 			tile = tilemap[y][x];

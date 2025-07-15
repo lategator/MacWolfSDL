@@ -12,7 +12,7 @@ LongWord ScaleDiv[2048];			/* Divide table for scalers */
 Boolean SetupScalers(void)
 {
 	Word i;
-	
+
 	if (!ScaleDiv[1]) {		/* Divide table inited already? */
 		i = 1;
 		do {
@@ -37,7 +37,7 @@ void ReleaseScalers(void)
 
 	Draw a vertical line with a scaler
 	(Used for WALL drawing)
-	
+
 **********************************/
 
 void IO_ScaleWallColumn(Word X,Word Scale,Word Tile,Word Column)
@@ -77,7 +77,7 @@ void IO_ScaleWallColumn(Word X,Word Scale,Word Tile,Word Column)
 
 	Draw a vertical line with a masked scaler
 (Used for SPRITE drawing)
-	
+
 **********************************/
 
 typedef struct {
@@ -95,7 +95,7 @@ void SpriteGlue(Byte *ArtStart,LongWord Frac,LongWord Integer,Byte *ScreenPtr,Wo
 	}
 }
 
-void IO_ScaleMaskedColumn(Word x,Word scale,unsigned short *CharPtr,Word column) 
+void IO_ScaleMaskedColumn(Word x,Word scale,unsigned short *CharPtr,Word column)
 {
 	Byte * CharPtr2;
 	int Y1,Y2;
@@ -109,12 +109,12 @@ void IO_ScaleMaskedColumn(Word x,Word scale,unsigned short *CharPtr,Word column)
 	LongWord Index;
 	LongWord Delta;
 	Word Width;
-	
+
 	if (!scale) {
 		return;
 	}
 	CharPtr2 = (Byte *) CharPtr;
-	TheFrac = ScaleDiv[scale];		/* Get the scale fraction */ 
+	TheFrac = ScaleDiv[scale];		/* Get the scale fraction */
 	RunPtr = (const SpriteRun *) &CharPtr[SwapUShortBE(CharPtr[column+1])/2];	/* Get the offset to the RunPtr data */
 	Screenad = &VideoPointer[x];		/* Set the base screen address */
 	TFrac = TheFrac<<8;
@@ -143,7 +143,7 @@ void IO_ScaleMaskedColumn(Word x,Word scale,unsigned short *CharPtr,Word column)
 				if (RunCount) {
 					SpriteGlue(
 						&CharPtr2[Index],	/* Pointer to art data */
-						TFrac,				/* Fractional value */ 
+						TFrac,				/* Fractional value */
 						TInt,				/* Integer value */
 						&Screenad[Y1*Width],			/* Pointer to screen */
 						RunCount,			/* Number of lines to draw */
@@ -152,15 +152,15 @@ void IO_ScaleMaskedColumn(Word x,Word scale,unsigned short *CharPtr,Word column)
 					);
 				}
 			}
-		} 
+		}
 		RunPtr++;						/* Next record */
-	}	
+	}
 }
 
 /**********************************
 
 	Draw an automap tile
-	
+
 **********************************/
 
 Byte *SmallFontPtr;
@@ -173,7 +173,7 @@ void DrawSmall(Word x,Word y,Word tile)
 
 	if (!SmallFontPtr) {
 		return;
-	}	
+	}
 	x*=16;
 	y*=16;
 	Screenad = &VideoPointer[YTable[y]+x];
@@ -195,7 +195,7 @@ void MakeSmallFont(void)
 	Word i,j,Width,Height;
 	Byte *DestPtr,*ArtStart;
 	Byte *TempPtr;
-	
+
 	SmallFontPtr = AllocSomeMem(16*16*65);
 	if (!SmallFontPtr) {
 		return;
@@ -223,7 +223,7 @@ void MakeSmallFont(void)
 	TempPtr = LoadAResource(MyBJFace);
 	memcpy(DestPtr,TempPtr,16*16);
 	ReleaseAResource(MyBJFace);
-	
+
 #if 0
 	TempPtr = AllocSomeMem(16*16*128);
 	memset(TempPtr,-1,16*16*128);
@@ -232,7 +232,7 @@ void MakeSmallFont(void)
 		memcpy(&TempPtr[(i+1)*256],&SmallFontPtr[(i*2)*256],256);
 	} while (++i<29);
 	i = 0;
-	do { 
+	do {
 		memcpy(&TempPtr[((i*2)+90)*256],&SmallFontPtr[(i+59)*256],256);
 		memcpy(&TempPtr[((i*2)+91)*256],&SmallFontPtr[(i+59)*256],256);
 	} while (++i<4);
@@ -242,11 +242,9 @@ void MakeSmallFont(void)
 }
 
 void KillSmallFont(void)
-{	
+{
 	if (SmallFontPtr) {
 		FreeSomeMem(SmallFontPtr);
-		SmallFontPtr=0;		
+		SmallFontPtr=0;
 	}
 }
-
-

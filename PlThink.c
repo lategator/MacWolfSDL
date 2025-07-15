@@ -5,11 +5,11 @@
 /**********************************
 
 	Change my weapon to the biggest one I got
-			
+
 **********************************/
 
 static void OutOfAmmo(void)
-{      
+{
 	if (gamestate.missile && gamestate.missiles) {
 		gamestate.pendingweapon = WP_MISSILE;
 		return;		/* Launcher & missiles */
@@ -33,11 +33,11 @@ static void OutOfAmmo(void)
 	gamestate.pendingweapon = WP_KNIFE;
 }
 
-		
+
 /**********************************
 
 	Draw the ammo for the new weapon
-			
+
 **********************************/
 
 void ChangeWeapon (void)
@@ -56,13 +56,13 @@ void ChangeWeapon (void)
 		break;
 	default:
 		break;
-	}		
+	}
 }
 
 /**********************************
 
 	Fire my weapon, change to knife if no more ammo
-			
+
 **********************************/
 
 void Cmd_Fire(void)
@@ -95,7 +95,7 @@ void Cmd_Fire(void)
 /**********************************
 
 	Try to use a switch, door or pushwall...
-			
+
 **********************************/
 
 void Cmd_Use(void)
@@ -108,7 +108,7 @@ void Cmd_Use(void)
 
 	x = actors[0].x >> FRACBITS;	/* Get the x,y in tiles */
 	y = actors[0].y >> FRACBITS;
-	
+
 	dir = ((gamestate.viewangle+ANGLES/8)&(ANGLES-1)) >> 7;	/* Force into a cardinal direction */
 
 	switch (dir) {
@@ -129,7 +129,7 @@ void Cmd_Use(void)
 		dir = CD_SOUTH;	/* South */
 	}
 
-	tile = tilemap[y][x];		/* Get the tile data */	
+	tile = tilemap[y][x];		/* Get the tile data */
 	if (tile & TI_DOOR) {		/* Is this a door? */
 		OperateDoor(tile&TI_NUMMASK);	/* Door # to operate */
 		return;
@@ -158,11 +158,11 @@ void Cmd_Use(void)
 /**********************************
 
 	Change my weapon
-			
+
 **********************************/
 
 void Cmd_ChangeWeapon(void)
-{                                                                                                                                                                                                                                                                                                                                                                                       
+{
 	for (;;) {
 		++gamestate.pendingweapon;		/* Next weapon */
 		switch(gamestate.pendingweapon) {
@@ -170,7 +170,7 @@ void Cmd_ChangeWeapon(void)
 			if (gamestate.ammo)	{	/* Do I have ammo ? */
 				return;		/* Use it! */
 			}
-			break;			
+			break;
 		case WP_MACHINEGUN:
 			if (gamestate.machinegun && gamestate.ammo) {
 				return;		/* Machine gun & ammo! */
@@ -194,7 +194,7 @@ void Cmd_ChangeWeapon(void)
 		default:
 			gamestate.pendingweapon = WP_KNIFE;	/* Force as the knife */
 			return;
-		}		
+		}
 	}
 }
 
@@ -202,7 +202,7 @@ void Cmd_ChangeWeapon(void)
 
 	Sets actor to the closest enemy in the line of fire, or 0
 	if there is no valid target
-			
+
 **********************************/
 
 actor_t *TargetEnemy (void)
@@ -228,7 +228,7 @@ actor_t *TargetEnemy (void)
 						}
 					}
 				}
-			} 
+			}
 			--xe;
 		} while (--i);
 	}
@@ -238,13 +238,13 @@ actor_t *TargetEnemy (void)
 /**********************************
 
 	Attack with a knife
-			
+
 **********************************/
 
 void KnifeAttack(void)
 {
 	actor_t *ActorPtr;
-	
+
 	ActorPtr = TargetEnemy();	/* Who to hit? */
 	if (ActorPtr) {				/* Got someone? */
 		if (CalcDistance(ActorPtr) <= KNIFEDIST) {	/* In range? */
@@ -259,14 +259,14 @@ void KnifeAttack(void)
 /**********************************
 
 	Attack with a pistol, machine gun, chain gun
-			
+
 **********************************/
 
 void GunAttack(void)
 {
 	Word Damage;
 	actor_t *ActorPtr;
-	
+
 	if (gamestate.weapon == WP_CHAINGUN ) {
 		Damage = SND_CHAIN|0x8000;		/* Bang! */
 	} else if (gamestate.weapon == WP_MACHINEGUN) {
@@ -295,21 +295,21 @@ void GunAttack(void)
 /**********************************
 
 	Attack with a flame thrower
-			
+
 **********************************/
 
 void FlameAttack(void)
 {
 	int	x;		/* Sine,cos value */
 	missile_t *MissilePtr;	/* Pointer to new missile record */
-	
+
 	madenoise = TRUE;
 	PlaySound(SND_FTHROW|0x8000);	/* Burn! */
 	if (!gamestate.godmode) {
 		--gamestate.gas;		/* Use a gallon of gas */
 	}
 	IO_DrawAmmo(gamestate.gas);	/* Draw the gas value */
-	
+
 /* flame sprite*/
 
 	MissilePtr = GetNewMissile();	/* Get a missile record */
@@ -328,14 +328,14 @@ void FlameAttack(void)
 /**********************************
 
 	Attack with a missile
-			
+
 **********************************/
 
 void MissileAttack(void)
 {
-	int	x;		/* Sine,Cos value */	
+	int	x;		/* Sine,Cos value */
 	missile_t *MissilePtr;	/* Pointer to new missile record */
-	
+
 	PlaySound(SND_ROCKET|0x8000);	/* Fire! */
 	madenoise = TRUE;		/* Made a racket */
 	if (!gamestate.godmode) {
@@ -358,7 +358,7 @@ void MissileAttack(void)
 /**********************************
 
 	Move the player (Called every tic)
-			
+
 **********************************/
 
 void MovePlayer(void)
@@ -397,7 +397,7 @@ void MovePlayer(void)
 	} else {
 		attackheld = FALSE;	/* It's released */
 	}
-		
+
 /* advance attacking action */
 
 	if (!gamestate.attackframe) {	/* Not in the middle of firing the weapon? */
@@ -407,7 +407,7 @@ void MovePlayer(void)
 		}
 		return;	/* Exit now */
 	}
-	
+
 /* I am in an attack, time yet? */
 
 	if (gamestate.attackcount>TicCount) {	/* Wait to attack! */
@@ -466,7 +466,7 @@ void MovePlayer(void)
 			break;
 		default:
 			break;
-		}		
+		}
 	}
 
 /* frame 3: second shot for chaingun and flamethrower */
@@ -492,7 +492,7 @@ void MovePlayer(void)
 
 	if (gamestate.attackframe == 4) {
 		if (buttonstate[bt_attack]) {	/* Held down? */
-			if ( (gamestate.weapon == WP_MACHINEGUN 
+			if ( (gamestate.weapon == WP_MACHINEGUN
 			|| gamestate.weapon == WP_CHAINGUN) && gamestate.ammo) {
 				gamestate.attackframe = 2;	/* Fire again */
 				GunAttack();				/* Shoot */
@@ -531,10 +531,8 @@ void MovePlayer(void)
 			break;
 		default:
 			break;
-		}		
+		}
 		gamestate.attackcount = 0;		/* Shut down the attack */
 		gamestate.attackframe = 0;
 	}
 }
-
-

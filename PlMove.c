@@ -5,7 +5,7 @@
 	See if players current position is ok
 	returns True if move ok
 	All coordinates are stored in 8.8 fractions (8 bits integer, 8 bits fraction)
-		
+
 **********************************/
 
 static Boolean TryMove(int Checkx,int Checky)
@@ -19,7 +19,7 @@ static Boolean TryMove(int Checkx,int Checky)
 	xh = (((int)Checkx + PLAYERSIZE)>>FRACBITS)+1;
 	yl = ((int)Checky - PLAYERSIZE)>>FRACBITS;
 	yh = (((int)Checky + PLAYERSIZE)>>FRACBITS)+1;
-	
+
 /* check for solid walls*/
 
 	y = yl;
@@ -72,7 +72,7 @@ static Boolean TryMove(int Checkx,int Checky)
 
 	Clip the player's motion
 	I will also try to use as much motion as I have
-		
+
 **********************************/
 
 static void ClipMove(short xmove,short ymove)
@@ -103,7 +103,7 @@ static void ClipMove(short xmove,short ymove)
 		}
 		Checky>>=1;
 	} while (Checkx || Checky);	/* Is there ANY motion? */
-	
+
 /* Try horizontal motion */
 
 	Checkx = actors[0].x + xmove;
@@ -123,11 +123,11 @@ static void ClipMove(short xmove,short ymove)
 /**********************************
 
 	Adds movement to xmove & ymove
-		
+
 **********************************/
 
 static void Thrust(Word angle,Word speed,short *xmove, short *ymove)
-{	
+{
 	angle &= ANGLES-1;		/* Mask the angle range */
 	if (speed >= TILEGLOBAL) {
 		speed = TILEGLOBAL-1;	/* Force maximum speed */
@@ -139,7 +139,7 @@ static void Thrust(Word angle,Word speed,short *xmove, short *ymove)
 /**********************************
 
 	Changes the player's angle and position
-		
+
 **********************************/
 
 #define TURNSPEED		4		/* Turning while moving */
@@ -153,11 +153,11 @@ void ControlMovement(void)
 	Word tile;
 	short xmove,ymove;
 	Word move;
-	
+
 	playermoving = FALSE;	/* No motion (Yet) */
 	xmove = 0;				/* Init my deltas */
 	ymove = 0;
-	
+
 	if (buttonstate[bt_run]) {
 		turn = FASTTURN*TicCount;	/* Really fast turn */
 		move = RUNSPEED*TicCount;
@@ -169,7 +169,7 @@ void ControlMovement(void)
 /* turning */
 
 	gamestate.viewangle += mouseturn;		/* Add in the mouse movement verbatim */
-	
+
 	if (buttonstate[bt_east]) {
 		gamestate.viewangle -= turn;		/* Turn right */
 	}
@@ -193,8 +193,8 @@ void ControlMovement(void)
 	}
 	if (buttonstate[bt_left]) {		/* Slide left keyboard */
 		Thrust(gamestate.viewangle + ANGLES/4, move>>1,&xmove,&ymove);
-	}	
-	
+	}
+
 /* Handle all forward motion */
 
 	total = buttonstate[bt_north] ? move : 0;	/* Move ahead? */
@@ -204,7 +204,7 @@ void ControlMovement(void)
 	if (total) {
 		Thrust(gamestate.viewangle, total,&xmove,&ymove);	/* Move ahead */
 	}
-	
+
 	total = buttonstate[bt_south] ? move : 0;	/* Reverse direction */
 	if (mousey > 0) {
 		total += mousey<<3;
@@ -212,10 +212,10 @@ void ControlMovement(void)
 	if (total) {
 		Thrust(gamestate.viewangle+ANGLES/2, total,&xmove,&ymove);
 	}
-	mousex = 0;		
+	mousex = 0;
 	mousey = 0;		/* Reset the mouse motion */
 	mouseturn = 0;
-	
+
 	if (xmove || ymove) {	/* Any motion? */
 		ClipMove(xmove,ymove);	/* Move ahead (Clipped) */
 		tile = tilemap[actors[0].y>>FRACBITS][actors[0].x>>FRACBITS];
@@ -224,4 +224,3 @@ void ControlMovement(void)
 		}
 	}
 }
-

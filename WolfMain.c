@@ -4,7 +4,7 @@
 /**********************************
 
 	Return the absolute value
-	
+
 **********************************/
 
 Word w_abs(short val)
@@ -15,7 +15,7 @@ Word w_abs(short val)
 /**********************************
 
 	Return a seeded random number
-	
+
 **********************************/
 
 Byte rndtable[256] = {
@@ -53,7 +53,7 @@ Word w_rnd(void)
 
 	Return an angle value based on a slope.
 	Assume that x is >= to y.
-		
+
 **********************************/
 
 Word AngleFromSlope2(Word y,Word x)
@@ -64,22 +64,22 @@ Word AngleFromSlope2(Word y,Word x)
 /**********************************
 
 	Convert an arbitrary point from the viewxy into an angle.
-	
-	To get a global angle from cartesian coordinates, the coordinates are flipped until 
-	they are in the first octant of the coordinate system, then the y (<=x) is scaled and 
+
+	To get a global angle from cartesian coordinates, the coordinates are flipped until
+	they are in the first octant of the coordinate system, then the y (<=x) is scaled and
 	divided by x to get a tangent (slope) value which is looked up in the tantoangle[] table.
 	The +1 size is to handle the case when x==y without additional checking.
-	
+
 **********************************/
 
 #define	ANG90	0x4000
 #define	ANG180	0x8000
 #define	ANG270	0xc000
 angle_t PointToAngle(fixed_t x, fixed_t y)
-{	
+{
 	x -= viewx;		/* Adjust the x and y based on the camera */
 	y = viewy - y;
-	
+
 	if (x>=0) {	/* x is positive? */
 		if (y>=0) {	/* y is positive? */
 			if (x>y) {
@@ -121,14 +121,14 @@ angle_t PointToAngle(fixed_t x, fixed_t y)
 **********************************/
 
 void GameOver(void)
-{	
+{
 	topspritenum = S_GAMEOVER;		/* Game over words */
 	topspritescale = 8;	/* Start the scale factor */
 	do {
 		RenderView();		/* Draw the 3-d view */
 		topspritescale+=8;
 	} while (topspritescale<120);
-	
+
 	for (;;) {		/* Stay here forever */
 		do {
 			if (WaitTicksEvent(1)) {	/* Canceled? */
@@ -150,19 +150,19 @@ void GameOver(void)
 /**********************************
 
 	Show the word "Victory" scaling in...
-	
+
 **********************************/
 
 void VictoryScale(void)
 {
 	topspritenum = S_VICTORY;
 	topspritescale = 16;
-	
+
 	do {
 		RenderView();
 		topspritescale += 16;
 	} while (topspritescale<240);
-	
+
 	for (;;) {
 		do {
 			if (WaitTicksEvent(1)) {
@@ -177,35 +177,35 @@ void VictoryScale(void)
 			}
 			RenderView();
 			topspritescale+=4;
-		} while (topspritescale<240);	
+		} while (topspritescale<240);
 	}
 }
 
 /**********************************
 
 	You died...
-	
+
 **********************************/
 
 void Died (void)
 {
 	Word Timer;	/* Time mark */
 	Word Adds;		/* Number of tics elapsed */
-	Word Total;	
+	Word Total;
 	angle_t	SrcAngle;	/* Angle of view */
 	angle_t DestAngle;	/* Angle of death */
 	fixed_t Motion;		/* Motion constant */
-	
+
 	gamestate.attackframe = 0;		/* Remove the gun shape */
 	NoWeaponDraw = TRUE;			/* The weapon is not drawn */
 	PlaySound(SND_PDIE);				/* ARRRGGGHHHH!! */
 	IO_DrawFace(9);					/* Show the dead face */
-		
+
 /* find angle to face attacker */
 
 	SrcAngle = gamestate.viewangle<<SHORTTOANGLESHIFT;		/* Get the fine current angle */
-	DestAngle = PointToAngle(killx,killy)&(-1<<SHORTTOANGLESHIFT);	/* What's the direction of the kill angle */	
-	
+	DestAngle = PointToAngle(killx,killy)&(-1<<SHORTTOANGLESHIFT);	/* What's the direction of the kill angle */
+
 /* rotate to attacker */
 
 	if (SrcAngle!=DestAngle) {				/* Do I need to rotate? */
@@ -223,7 +223,7 @@ void Died (void)
 			SrcAngle += Motion*Adds;	/* Spin */
 			gamestate.viewangle = SrcAngle>>SHORTTOANGLESHIFT;	/* Set the new view angle */
 			RenderView();		/* Show the view */
-		}				
+		}
 		gamestate.viewangle = DestAngle>>SHORTTOANGLESHIFT;		/* Finish the motion */
 		RenderView();			/* Draw the screen */
 	}
@@ -259,13 +259,13 @@ void Died (void)
 /**********************************
 
 	Calls draw face if time to change
-	
+
 **********************************/
 
 void UpdateFace(void)
 {
 	Word Base;
-	
+
 	if (facecount>TicCount) {	/* Time to change the face? */
 		facecount-=TicCount;	/* Wait a bit */
 	} else {
@@ -282,7 +282,7 @@ void UpdateFace(void)
 /**********************************
 
 	Prepare for a game loop
-	
+
 **********************************/
 
 void PrepPlayLoop (void)
@@ -326,7 +326,7 @@ Again:
 /**********************************
 
 	Play the game
-	
+
 **********************************/
 
 void PlayLoop(void)
@@ -338,7 +338,7 @@ void PlayLoop(void)
 		Timer = ReadTick();		/* How much time has elapsed */
 		TicCount = (Timer-LastTicCount);
 		gamestate.playtime += TicCount;	/* Add the physical time to the elapsed time */
-		
+
 		LastTicCount=Timer;
 		if (!SlowDown) {
 			TicCount = 4;		/* Adjust from 4 */
@@ -352,10 +352,10 @@ void PlayLoop(void)
 		MovePWalls();		/* Move all push walls */
 		MovePlayer();		/* Move the player */
 		MoveActors();		/* Move all the bad guys */
-		MoveMissiles();		/* Move all projectiles */	
+		MoveMissiles();		/* Move all projectiles */
 		UpdateFace();		/* Draw BJ's face and animate it */
 		viewx = actors[0].x;	/* Where is the camera? */
-		viewy = actors[0].y;		
+		viewy = actors[0].y;
 		RenderView();		/* Draw the 3D view */
 	} while (playstate==EX_STILLPLAYING);
 	StopSong();
@@ -376,7 +376,7 @@ void NewGame(void)
 	gamestate.ammo = STARTAMMO;	/* Reset the ammo */
 	if (!difficulty) {
 		gamestate.ammo += STARTAMMO;	/* Double the ammo if easy */
-	}		
+	}
 	gamestate.maxammo = 99;		/* Refill the ammo */
 	gamestate.lives = 3;		/* 3 lives */
 	gamestate.nextextra = EXTRAPOINTS;	/* Next free life score needed */
@@ -386,11 +386,11 @@ void NewGame(void)
 /**********************************
 
 	Redraw the main status bar at the bottom
-	
+
 **********************************/
 
 void RedrawStatusBar(void)
-{	
+{
 	IO_DrawStatusBar();			/* Draw the status bar */
 	IO_DrawFloor(gamestate.mapon);	/* Draw the current floor # */
 	IO_DrawScore(gamestate.score);	/* Draw the current score */
@@ -415,13 +415,13 @@ void RedrawStatusBar(void)
 /**********************************
 
 	Play the game!
-	
+
 **********************************/
 
 void GameLoop (void)
 {
 	for(;;) {
-skipbrief:		
+skipbrief:
 		ShowGetPsyched();
 		PrepPlayLoop();		/* Init internal variables */
 		EndGetPsyched();
@@ -431,10 +431,10 @@ skipbrief:
 			Died();						/* Run the death code */
 			if (!gamestate.lives) {		/* No more lives? */
 				return;					/* Exit then */
-			}	
+			}
 			goto skipbrief;				/* Try again */
 		}
-		
+
 		if (playstate == EX_SECRET) {	/* Going to the secret level? */
 			nextmap = MapListPtr->InfoArray[gamestate.mapon].SecretLevel;
 		} else if (playstate != EX_WARPED) {

@@ -22,7 +22,7 @@ SND_GUNSHT,		/* 45 Shoot */
 SND_MGUN,		/* Sub machine gun */
 SND_CHAIN,		/* Chain gun */
 SND_FTHROW,		/* Flame thrower */
-SND_ROCKET,		/* Rocket launcher */	
+SND_ROCKET,		/* Rocket launcher */
 SND_PWALL,		/* Start pushwall */
 SND_PWALL2,		/* Stop pushwall */
 SND_GUTEN,		/* Guten tag */

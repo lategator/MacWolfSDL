@@ -14,7 +14,7 @@ void StopSong(void)
 /**********************************
 
 	Play a new song
-	
+
 **********************************/
 
 void StartSong(Word songnum)

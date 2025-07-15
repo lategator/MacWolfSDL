@@ -4,7 +4,7 @@
 
 #define	rAboutAlert	128				/* about alert */
 #define	rUserAlert	129				/* error user alert */
-#define AskSizeWin	130				/* Ask for screen size window */ 
+#define AskSizeWin	130				/* Ask for screen size window */
 #define NewGameWin	131				/* Choose difficulty */
 #define Not607Win	132				/* Not system 6.0.7 or later */
 #define NotColorWin	133				/* No color */

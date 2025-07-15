@@ -34,20 +34,20 @@ RFILE* res_open (const char *path, int mode) {
     RFILE* rp = malloc(sizeof(RFILE));
     if (rp == NULL) efail(ENOMEM);
     bzero(rp, sizeof(RFILE));
-    
+
     // open
     rp->fp = fopen(path, "r");
     if (rp->fp == NULL) {
         free(rp);
         return NULL;
     }
-    
+
     // get size
     errno = 0;
     fseek(rp->fp, 0, SEEK_END);
     rp->size = ftell(rp->fp);
     if (errno) effail(errno, rp);
-    
+
     rp->buf = NULL;
     return res_load(rp);
 }
@@ -63,7 +63,7 @@ RFILE* res_open_mem (void *buf, size_t size, int copy) {
         if (rp == NULL) effail(ENOMEM, rp);
         memcpy(rp->buf, buf, size);
     } else rp->buf = buf;
-    
+
     return res_load(rp);
 }
 
@@ -82,7 +82,7 @@ int res_close (RFILE* rp) {
     if (rp == NULL) eret(EBADF, EOF);
     if (rp->buf) free(rp->buf);
     if (rp->fp) fclose(rp->fp);
-    
+
     // free list
     if (rp->types) {
         for(int i=0; i < rp->numTypes; i++) {
@@ -96,7 +96,7 @@ int res_close (RFILE* rp) {
         }
         free(rp->types);
     }
-    
+
     free(rp);
     return 0;
 }
@@ -112,10 +112,10 @@ uint32_t* res_types (RFILE *rp, uint32_t *buf, size_t start, size_t size, size_t
     if (buf == NULL) efail(ENOMEM);
     if (read) *read = size;
     if (remain) *remain = rp->numTypes - (size + start);
-    
+
     for(size_t i=0; i < size; i++)
         buf[i] = rp->types[start+i].type;
-    
+
     return buf;
 }
 
@@ -134,7 +134,7 @@ ResAttr* res_list (RFILE *rp, uint32_t type, ResAttr *buf, size_t start, size_t 
     if (buf == NULL) efail(ENOMEM);
     if (read) *read = size;
     if (remain) *remain = t->count - (size + start);
-    
+
     for(size_t i=0; i < size; i++) {
         buf[i].index = i;
         buf[i].ID    = t->list[start+i].ID;
@@ -142,7 +142,7 @@ ResAttr* res_list (RFILE *rp, uint32_t type, ResAttr *buf, size_t start, size_t 
         buf[i].size  = t->list[start+i].size;
         buf[i].name  = t->list[start+i].name;
     }
-    
+
     return buf;
 }
 
@@ -153,13 +153,13 @@ ResAttr* res_attr (RFILE *rp, uint32_t type, int16_t ID, ResAttr *buf) {
     if (ref == NULL) efail(ENOENT);
     if (buf == NULL) buf = malloc(sizeof(ResAttr));
     if (buf == NULL) efail(ENOMEM);
-    
+
     buf->index = ref - t->list;
     buf->ID    = ref->ID;
     buf->flags = ref->flags;
     buf->size  = ref->size;
     buf->name  = ref->name;
-    
+
     return buf;
 }
 
@@ -174,7 +174,7 @@ void* res_read (RFILE *rp, uint32_t type, int16_t ID, void *buf, size_t start, s
     if (t == NULL) efail(ENOENT);
     struct RmResRef *ref = res_ref_find(rp, t, ID);
     if (ref == NULL) efail(ENOENT);
-    
+
     if (ref->flags.fl.compressed) efail(ENOSYS);
     return res_read_raw(rp, ref, buf, start, size, read, remain);
 }
@@ -191,7 +191,7 @@ void* res_read_ind (RFILE *rp, uint32_t type, int16_t ind, void *buf, size_t sta
     if (ind >= t->count || ind < 0) efail(ENOENT);
     struct RmResRef *ref = &t->list[ind];
     if (ref == NULL) efail(ENOENT);
-    
+
     if (ref->flags.fl.compressed) efail(ENOSYS);
     return res_read_raw(rp, ref, buf, start, size, read, remain);
 }
@@ -233,7 +233,7 @@ void* res_bread (RFILE *rp, void *buf, size_t offset, size_t count) {
     if (offset+count > rp->size) efail(EFAULT);
     if (buf == NULL) buf = malloc(count);
     if (buf == NULL) efail(ENOMEM);
-    
+
     if (rp->buf)
         // memory
         memcpy(buf, rp->buf+offset, count);
@@ -265,7 +265,7 @@ void* res_read_raw (RFILE *rp, struct RmResRef *ref, void *buf, size_t start, si
     if (buf == NULL) efail(ENOMEM);
     if (read) *read = size;
     if (remain) *remain = ref->psize - (size + start);
-    
+
     return res_bread(rp, buf, rstart, size);
 }
 
@@ -274,20 +274,20 @@ RFILE* res_load (RFILE *rp) {
     struct RfHdr hdr;
     res_bread(rp, &hdr, 0, sizeof(struct RfHdr));
     rp->dataOffset = ntohl(hdr.dataOffset);
-    
+
     // read map
     struct RfMap *map = res_bread(rp, NULL, (size_t)ntohl(hdr.mapOffset), (size_t)ntohl(hdr.mapLength));
     if (map == NULL) egoto(EINVAL, error);
     rp->attributes = ntohs(map->attributes);
     struct RfTypeList *types = ((void*)map)+ntohs(map->typeListOffset);
     uint8_t *names = ((void*)map)+ntohs(map->nameListOffset);
-    
+
     // read types
     rp->numTypes = 1+(int16_t)ntohs(types->count);
     rp->types = calloc(rp->numTypes, sizeof(struct RmType));
     if (rp->types == NULL) egoto(ENOMEM, error);
     bzero(rp->types, sizeof(struct RmType) * rp->numTypes);
-    
+
     for(int i=0; i < rp->numTypes; i++) {
         struct RmType *t = &rp->types[i];
         t->type = ntohl(types->entry[i].type);
@@ -295,7 +295,7 @@ RFILE* res_load (RFILE *rp) {
         t->list = calloc(t->count, sizeof(struct RmResRef));
         if (t->list == NULL) egoto(ENOMEM, error);
         bzero(t->list, t->count * sizeof(struct RmResRef));
-        
+
         // read resource refs & names
         int refsNeedSort = 0;
         struct RfRefEntry *ent = ((void*)types)+ntohs(types->entry[i].offset);
@@ -305,7 +305,7 @@ RFILE* res_load (RFILE *rp) {
             t->list[j].flags.b = ent[j].attributes;
             t->list[j].offset = ((ent[j].offHi << 16) | ntohs(ent[j].offLo));
             t->list[j].psize = res_szread(rp, rp->dataOffset+t->list[j].offset);
-            
+
             uint16_t nameOffset = ntohs(ent[j].nameOffset);
             if (nameOffset == 0xFFFF) t->list[j].name = NULL;
             else {
@@ -314,7 +314,7 @@ RFILE* res_load (RFILE *rp) {
                 t->list[j].name[names[nameOffset]] = '\0';
                 memcpy(t->list[j].name, &names[nameOffset+1], names[nameOffset]);
             }
-            
+
             // find logical size
             if (t->list[j].flags.fl.compressed) {
                 struct RfCmpHdr cmpHdr;
@@ -323,7 +323,7 @@ RFILE* res_load (RFILE *rp) {
                 if (ntohl(cmpHdr.tag) != kCompressedResourceTag)
                     goto notCompressed;
                 t->list[j].size = ntohl(cmpHdr.size);
-                
+
                 if (ntohl(cmpHdr.flags) == kCompressedResourceFlg0)
                     t->list[j].dcmp = ntohs(cmpHdr.u.v0.dcmp);
                 else if (ntohl(cmpHdr.flags) == kCompressedResourceFlg1)
@@ -333,7 +333,7 @@ RFILE* res_load (RFILE *rp) {
                     fprintf(stderr, "libres: %c%c%c%c %hd: unknown compression flags\n", TYPECHARS(t->type), t->list[j].ID);
                 }
             }
-            
+
             // resource not compressed, logical size = physical size
             if (t->list[j].flags.fl.compressed == 0) {
                 notCompressed:
@@ -341,16 +341,16 @@ RFILE* res_load (RFILE *rp) {
                 t->list[j].size = t->list[j].psize;
             }
         }
-        
+
         // keep ref list sorted
         // they are normally sorted by ID already, so it's rarely needed
         if (refsNeedSort) qsort(t->list, t->count, sizeof(struct RmResRef), (int(*)(const void*, const void*))res_ref_compar);
     }
-    
+
     // keep type list sorted
     // types are sorted alphabetically in files, we need them sorted numerically
     qsort(rp->types, rp->numTypes, sizeof(struct RmType), (int(*)(const void*, const void*))res_type_compar);
-    
+
     errno = 0;
     free(map);
     return rp;
