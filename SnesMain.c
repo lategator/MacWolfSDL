@@ -4,6 +4,43 @@
 
 /**********************************
 
+	Load the map tables
+
+**********************************/
+
+void LoadMapSetData(void)
+{
+	LongWord Length;
+	int i;
+
+	SoundListPtr = (short int *) LoadAResource(MySoundList);	/* Get the list of sounds */
+	Length = ResourceLength(MySoundList)>>1;
+	for (i = 0; i < Length; i++)
+		SoundListPtr[i] = SwapShortBE(SoundListPtr[i]);
+	RegisterSounds(SoundListPtr);
+	MapListPtr = (maplist_t *) LoadAResource(rMapList);	/* Get the map list */
+	MapListPtr->MaxMap = SwapUShortBE(MapListPtr->MaxMap);
+	MapListPtr->MapRezNum = SwapUShortBE(MapListPtr->MapRezNum);
+	for (int i = 0; i < MapListPtr->MaxMap; i++) {
+		MapInfo_t *Info = &MapListPtr->InfoArray[i];
+		Info->NextLevel = SwapUShortBE(Info->NextLevel);
+		Info->SecretLevel = SwapUShortBE(Info->SecretLevel);
+		Info->ParTime = SwapUShortBE(Info->ParTime);
+		Info->ScenarioNum = SwapUShortBE(Info->ScenarioNum);
+		Info->FloorNum = SwapUShortBE(Info->FloorNum);
+	}
+	SongListPtr = (unsigned short *) LoadAResource(rSongList);
+	Length = ResourceLength(rSongList)>>1;
+	for (i = 0; i < Length; i++)
+		SongListPtr[i] = SwapUShortBE(SongListPtr[i]);
+	WallListPtr = (unsigned short *) LoadAResource(MyWallList);
+	Length = ResourceLength(MyWallList)>>1;
+	for (i = 0; i < Length; i++)
+		WallListPtr[i] = SwapUShortBE(WallListPtr[i]);
+}
+
+/**********************************
+
 	Prepare the screen for game
 
 **********************************/

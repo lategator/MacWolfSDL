@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <err.h>
 
+#define NAUDIOCHANS 8
+
 Word MacWidth;					/* Width of play screen (Same as GameRect.right) */
 Word MacHeight;					/* Height of play screen (Same as GameRect.bottom) */
 Word MacViewHeight;				/* Height of 3d screen (Bottom of 3D view */
@@ -19,53 +21,29 @@ static SDL_Renderer *SdlRenderer = NULL;
 static SDL_Texture *SdlTexture = NULL;
 static SDL_Surface *SdlSurface = NULL;
 static SDL_Palette *SdlPalette = NULL;
+static SDL_AudioDeviceID SdlAudioDevice = 0;
+static SDL_AudioStream *SdlSfxChannels[NAUDIOCHANS] = { NULL };
+static Word SdlSfxNums[NAUDIOCHANS];
 static char *SaveFileName = NULL;
 static Byte *GameShapeBuffer = NULL;
+
+Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt);
 
 static Word DoMyAlert(Word AlertNum)
 {
 	return 0;
 }
 
-static void RegisterSounds(short *SoundIDs)
-{
-}
-
 void InitTools(void)
 {
-	int i;
-	LongWord Length;
-
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO))
 		errx(1, "SDL_Init");
-	//InitSoundMusicSystem(8,8,5,jxLowQuality);
-	//PurgeSongs(TRUE);			/* Allow songs to stay in memory */
+	ChangeAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
 	InitResources();
-	SoundListPtr = (short int *) LoadAResource(MySoundList);	/* Get the list of sounds */
-	Length = ResourceLength(MySoundList)>>1;
-	for (i = 0; i < Length; i++)
-		SoundListPtr[i] = SwapShortBE(SoundListPtr[i]);
-	RegisterSounds(SoundListPtr);
+	if (!LoadLevelResources())
+		err(1, "LoadLevelResources");
 	GetTableMemory();
-	MapListPtr = (maplist_t *) LoadAResource(rMapList);	/* Get the map list */
-	MapListPtr->MaxMap = SwapUShortBE(MapListPtr->MaxMap);
-	MapListPtr->MapRezNum = SwapUShortBE(MapListPtr->MapRezNum);
-	for (int i = 0; i < MapListPtr->MaxMap; i++) {
-		MapInfo_t *Info = &MapListPtr->InfoArray[i];
-		Info->NextLevel = SwapUShortBE(Info->NextLevel);
-		Info->SecretLevel = SwapUShortBE(Info->SecretLevel);
-		Info->ParTime = SwapUShortBE(Info->ParTime);
-		Info->ScenarioNum = SwapUShortBE(Info->ScenarioNum);
-		Info->FloorNum = SwapUShortBE(Info->FloorNum);
-	}
-	SongListPtr = (unsigned short *) LoadAResource(rSongList);
-	Length = ResourceLength(rSongList)>>1;
-	for (i = 0; i < Length; i++)
-		SongListPtr[i] = SwapUShortBE(SongListPtr[i]);
-	WallListPtr = (unsigned short *) LoadAResource(MyWallList);
-	Length = ResourceLength(MyWallList)>>1;
-	for (i = 0; i < Length; i++)
-		WallListPtr[i] = SwapUShortBE(WallListPtr[i]);
+	LoadMapSetData();
 	if (MapListPtr->MaxMap==3) {	/* Shareware version? */
 		DoMyAlert(ShareWareWin);	/* Show the shareware message */
 	}
@@ -845,4 +823,109 @@ Boolean ChooseSaveGame(void)
 	SDL_LockMutex(DialogMutex);
 	SDL_UnlockMutex(DialogMutex);
 	return DialogCancel;
+}
+
+/**********************************
+
+	Audio mixer
+
+**********************************/
+
+static void CloseAudio(void);
+
+Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt)
+{
+	SDL_AudioSpec RealFmt;
+	static const SDL_AudioSpec MacSndFmt = {
+		.format = SDL_AUDIO_U8,
+		.channels = 1,
+		.freq = 22254,
+	};
+
+	if (ID == SdlAudioDevice)
+		return TRUE;
+	CloseAudio();
+
+	SdlAudioDevice = SDL_OpenAudioDevice(ID, Fmt);
+	if (!SdlAudioDevice)
+		return FALSE;
+	if (!SDL_GetAudioDeviceFormat(SdlAudioDevice, &RealFmt, NULL))
+		goto Fail;
+	for (int i = 0; i < NAUDIOCHANS; i++) {
+		SdlSfxNums[i] = -1;
+		SdlSfxChannels[i] = SDL_CreateAudioStream(&MacSndFmt, &RealFmt);
+		if (!SdlSfxChannels[i])
+			goto Fail;
+	}
+
+	if (!SDL_BindAudioStreams(SdlAudioDevice, SdlSfxChannels, NAUDIOCHANS))
+		goto Fail;
+	if (!SDL_ResumeAudioDevice(SdlAudioDevice))
+		goto Fail;
+	return TRUE;
+Fail:
+	for (int i = 0; i < NAUDIOCHANS; i++) {
+		if (SdlSfxChannels[i])
+			SDL_DestroyAudioStream(SdlSfxChannels[i]);
+	}
+	SDL_CloseAudioDevice(SdlAudioDevice);
+	return FALSE;
+}
+
+static void CloseAudio(void)
+{
+	if (SdlAudioDevice) {
+		SDL_PauseAudioDevice(SdlAudioDevice);
+		for (int i = 0; i < NAUDIOCHANS; i++) {
+			if (SdlSfxChannels[i])
+				SDL_DestroyAudioStream(SdlSfxChannels[i]);
+			SdlSfxChannels[i] = NULL;
+			SdlSfxNums[i] = -1;
+		}
+		SDL_CloseAudioDevice(SdlAudioDevice);
+		SdlAudioDevice = 0;
+	}
+}
+
+void BeginSound(Word SoundNum) {
+	int i, Samples, Chan = 0, MinSamples = 0x7FFFFFFF;
+	Sound *Snd;
+
+	if (!SdlAudioDevice || SDL_AudioDevicePaused(SdlAudioDevice))
+		return;
+	Snd = LoadSound(SoundNum);
+	if (!Snd)
+		return;
+	for (i = 0; i < NAUDIOCHANS; i++) {
+		if (SdlSfxNums[i] == (Word)-1) {
+			Chan = i;
+			break;
+		}
+		Samples = SDL_GetAudioStreamQueued(SdlSfxChannels[i]);
+		if (Samples == 0) {
+			Chan = i;
+			break;
+		}
+		if (Samples < MinSamples) {
+			MinSamples = Samples;
+			Chan = i;
+		}
+	}
+	SDL_ClearAudioStream(SdlSfxChannels[Chan]);
+	SdlSfxNums[Chan] = SoundNum;
+	SDL_PutAudioStreamData(SdlSfxChannels[Chan], Snd->data, Snd->size);
+}
+void EndSound(Word SoundNum) {
+	for (int i = 0; i < NAUDIOCHANS; i++) {
+		if (SdlSfxNums[i] == SoundNum) {
+			SDL_ClearAudioStream(SdlSfxChannels[i]);
+			SdlSfxNums[i] = -1;
+		}
+	}
+}
+void EndAllSound(void) {
+	for (int i = 0; i < NAUDIOCHANS; i++) {
+		SDL_ClearAudioStream(SdlSfxChannels[i]);
+		SdlSfxNums[i] = -1;
+	}
 }

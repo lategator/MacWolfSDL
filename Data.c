@@ -1,4 +1,5 @@
 #include "WolfDef.h"
+#include <stddef.h>
 
 /**********************************
 
@@ -78,10 +79,10 @@ Word SlowDown = 1;			/* Force the game to 15 hz */
 Word MouseEnabled = 0;		/* Allow mouse control */
 Word GameViewSize = 3;		/* Size of the game screen */
 Word NoWeaponDraw=1;			/* Flag to not draw the weapon on the screen */
-maplist_t *MapListPtr;		/* Pointer to map info record */
-short *SoundListPtr;	/* Pointer to sound list record */
-unsigned short *SongListPtr;	/* Pointer to song list record */
-unsigned short *WallListPtr;	/* Pointer to wall list record */
+maplist_t *MapListPtr = NULL;		/* Pointer to map info record */
+short *SoundListPtr = NULL;	/* Pointer to sound list record */
+unsigned short *SongListPtr = NULL;	/* Pointer to song list record */
+unsigned short *WallListPtr = NULL;	/* Pointer to wall list record */
 Word MaxScaler = 1;			/* Maximum number of VALID scalers */
 Boolean ShowPush;			/* Cheat for pushwalls */
 Byte textures[MAPSIZE*2+5][MAPSIZE];	/* Texture indexes */

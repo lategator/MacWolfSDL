@@ -8,11 +8,8 @@
 
 #include "Burger.h"
 #include "WolfDef.h"		/* Get the prototypes */
-#include "res.h"
 #include <string.h>
-#include <stdio.h>
 #include <err.h>
-//#include "SoundMusicSystem.h"
 #include <SDL3/SDL.h>
 
 /**********************************
@@ -23,7 +20,6 @@
 
 Word DoEvent(SDL_Event *event);
 void BlastScreen(void);
-static Word FreeStage(Word Stage,LongWord Size);
 
 Word NoSystemMem;
 unsigned char *VideoPointer;	/* Pointer to video memory */
@@ -226,11 +222,11 @@ void PlaySound(Word SoundNum)
 	if (SoundNum && (SystemState&SfxActive)) {
 		SoundNum+=127;
 		if (SoundNum&0x8000) {		/* Mono sound */
-			//EndSound(SoundNum&0x7fff);
+			EndSound(SoundNum&0x7fff);
 		}
-		//BeginSound(SoundNum&0x7fff,11127<<17L);
+		BeginSound(SoundNum&0x7fff);
 	} else {
-		//EndAllSound();
+		EndAllSound();
 	}
 }
 
@@ -242,7 +238,7 @@ void PlaySound(Word SoundNum)
 
 void StopSound(Word SoundNum)
 {
-	//EndSound(SoundNum+127);
+	EndSound(SoundNum+127);
 }
 
 static Word LastSong = -1;
@@ -613,158 +609,12 @@ void FadeToPtr(unsigned char *PalPtr)
 	} while (++Count<17);
 }
 
-/**********************************
-
-	Resource manager subsystem
-
-**********************************/
-
-typedef struct {
-	void *data;
-} Resource;
-
-static const char *MainResourceFile = "data/Wolf3D.rsrc";
-//static const char *LevelsFolder = "data/Levels";
-static const uint32_t ResType = 0x42524752; /* BRGR */
-static RFILE *MainResources = NULL;
-Resource *ResourceCache = NULL;
-static RFILE *LevelResources = NULL;
-Resource *LevelResourceCache = NULL;
-
-static RFILE *LoadResources(const char *Filename, Resource **cache_out) {
-	size_t Count;
-	RFILE *Rp;
-	Resource *Cache;
-
-	Rp = res_open(Filename, 0);
-	if (!Rp)
-		return NULL;
-	Count = res_count(Rp, ResType); /* BRGR */
-	Cache = SDL_calloc(Count, sizeof(Resource));
-	if (!Cache) {
-		res_close(Rp);
-		return NULL;
-	}
-	*cache_out = Cache;
-	return Rp;
-}
-
-void InitResources(void)
-{
-	if (MainResources)
-		return;
-	MainResources = LoadResources(MainResourceFile, &ResourceCache);
-	if (!MainResources)
-		err(1, "%s", MainResourceFile);
-	LoadLevelResources("data/Levels/_Second_Encounter_(30_Levels).rsrc");
-}
-
-Boolean LoadLevelResources(const char *Filename)
-{
-	if (LevelResources) {
-		uint32_t Count = res_count(LevelResources, ResType);
-		res_close(LevelResources);
-		for (int i = 0; i < Count; i++)
-			if (LevelResourceCache[i].data)
-				SDL_free(LevelResourceCache[i].data);
-		SDL_free(ResourceCache);
-		ResourceCache = NULL;
-	}
-	LevelResources = LoadResources(Filename, &LevelResourceCache);
-	return LevelResources != NULL;
-}
-
-static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
-{
-	ResAttr Attr;
-	void *Data;
-
-	if (res_attr(Rp, ResType, RezNum, &Attr) == NULL)
-		return NULL;
-	if (Cache[Attr.index].data)
-		return Cache[Attr.index].data;
-	Data = SDL_malloc(Attr.size);
-	if (!Data)
-		return NULL;
-	if (!res_read_ind(Rp, ResType, Attr.index, Data, 0, Attr.size, NULL, NULL)) {
-		SDL_free(Data);
-		return NULL;
-	}
-	Cache[Attr.index].data = Data;
-	return Data;
-}
-
-static Resource *GetResource(Word RezNum)
-{
-	Resource *Res;
-	Res = GetResource2(RezNum, LevelResources, LevelResourceCache);
-	if (Res)
-		return Res;
-	return GetResource2(RezNum, MainResources, ResourceCache);
-}
-
-/**********************************
-
-	Load a personal resource
-
-**********************************/
-
-void *LoadAResource(Word RezNum)
-{
-	Word Stage;
-	Resource *Res;
-
-	Stage = 0;
-	do {
-		Stage = FreeStage(Stage,128000);
-		Res = GetResource(RezNum);
-		if (Res)
-			return Res;
-	} while (Stage);
-	return NULL;
-}
-
-LongWord ResourceLength(Word RezNum)
-{
-	ResAttr attr;
-	if (res_attr(MainResources, ResType, RezNum, &attr))
-		return attr.size;
-	return 0;
-}
-
-/**********************************
-
-	Allow a resource to be purged
-
-**********************************/
-
-void ReleaseAResource(Word RezNum)
-{
-	ResAttr attr;
-	if (res_attr(LevelResources, ResType, RezNum, &attr)) {
-		if (LevelResourceCache[attr.index].data) {
-			SDL_free(LevelResourceCache[attr.index].data);
-			LevelResourceCache[attr.index].data = NULL;
-		}
-	} else if (res_attr(MainResources, ResType, RezNum, &attr)) {
-		if (ResourceCache[attr.index].data) {
-			SDL_free(ResourceCache[attr.index].data);
-			ResourceCache[attr.index].data = NULL;
-		}
-	}
-}
-
-/**********************************
-
-	Force a resource to be destroyed
-
-**********************************/
-
 void KillAResource(Word RezNum)
 {
 	ReleaseAResource(RezNum);
 }
 
+/*
 void SaveJunk(void *AckPtr,Word Length)
 {
 static Word Count=1;
@@ -776,57 +626,7 @@ static Word Count=1;
 	fclose(fp);
 	++Count;
 }
-
-/**********************************
-
-	Decompress using LZSS
-
-**********************************/
-
-#if 1
-void DLZSS(Byte * restrict Dest,const Byte * restrict Src,LongWord Length)
-{
-	Word BitBucket;
-	Word RunCount;
-	Word Fun;
-	Byte *BackPtr;
-
-	if (!Length) {
-		return;
-	}
-	BitBucket = (Word) Src[0] | 0x100;
-	++Src;
-	do {
-		if (BitBucket&1) {
-			Dest[0] = Src[0];
-			++Src;
-			++Dest;
-			--Length;
-		} else {
-			RunCount = (Word) Src[0] | ((Word) Src[1]<<8);
-			Fun = 0x1000-(RunCount&0xfff);
-			BackPtr = Dest-Fun;
-			RunCount = ((RunCount>>12) & 0x0f) + 3;
-			if (Length >= RunCount) {
-				Length -= RunCount;
-			} else {
-				Length = 0;
-			}
-			do {
-				*Dest++ = *BackPtr++;
-			} while (--RunCount);
-			Src+=2;
-		}
-		if (Length == 0)
-			break;
-		BitBucket>>=1;
-		if (BitBucket==1) {
-			BitBucket = (Word)Src[0] | 0x100;
-			++Src;
-		}
-	} while (1);
-}
-#endif
+*/
 
 /**********************************
 
@@ -837,33 +637,6 @@ void DLZSS(Byte * restrict Dest,const Byte * restrict Src,LongWord Length)
 void *AllocSomeMem(LongWord Size)
 {
 	return SDL_malloc(Size);
-}
-
-/**********************************
-
-	Allocate some memory
-
-**********************************/
-
-static Word FreeStage(Word Stage,LongWord Size)
-{
-	switch (Stage) {
-	case 1:
-		//PurgeAllSounds(Size);		/* Kill off sounds until I can get memory */
-		break;
-	case 2:
-		//PlaySound(0);				/* Shut down all sounds... */
-		//PurgeAllSounds(Size);		/* Purge them */
-		break;
-	case 3:
-		//PlaySong(0);				/* Kill music */
-		//FreeSong();					/* Purge it */
-		//PurgeAllSounds(Size);		/* Make SURE it's gone! */
-		break;
-	case 4:
-		return 0;
-	}
-	return Stage+1;
 }
 
 /**********************************

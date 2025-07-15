@@ -533,7 +533,7 @@ extern Byte *ArtData[64];
 extern Byte textures[MAPSIZE*2+5][MAPSIZE]; /* 0-63 is horizontal, 64-127 is vertical*/
 										/* 128 - 132 are doors*/
 
-/* In Mac.c, 3DO.c, AppleIIgs.c */
+/* In SDLWolf.c (formerly Mac.c, 3DO.c, AppleIIgs.c) */
 
 struct Rect {
   short               top;
@@ -556,6 +556,9 @@ extern void EndGetPsyched(void);
 extern Word ChooseGameDiff(void);
 extern void ShareWareEnd(void);
 extern void FinishLoadGame(void);
+extern void BeginSound(Word SoundNum);
+extern void EndSound(Word SoundNum);
+extern void EndAllSound(void);
 
 /* In StateDef.c */
 
@@ -789,6 +792,7 @@ extern void RenderBSPNode(Word bspnum);
 
 /* In SnesMain.c */
 
+extern void LoadMapSetData(void);
 extern void SetupPlayScreen(void);
 extern void RunAutoMap(void);
 extern void StartGame(void);

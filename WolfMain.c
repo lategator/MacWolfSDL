@@ -204,7 +204,7 @@ void Died (void)
 /* find angle to face attacker */
 
 	SrcAngle = gamestate.viewangle<<SHORTTOANGLESHIFT;		/* Get the fine current angle */
-	DestAngle = PointToAngle(killx,killy)&(-1<<SHORTTOANGLESHIFT);	/* What's the direction of the kill angle */
+	DestAngle = PointToAngle(killx,killy)&(-1U<<SHORTTOANGLESHIFT);	/* What's the direction of the kill angle */
 
 /* rotate to attacker */
 

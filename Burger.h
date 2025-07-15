@@ -97,10 +97,19 @@ void FadeTo(Word PalNum);
 void FadeToBlack(void);
 void FadeToPtr(unsigned char *PalPtr);
 
+void RegisterSounds(short *SoundIDs);
 void InitResources(void);
-Boolean LoadLevelResources(const char *filename);
+Boolean LoadLevelResources(void);
 void *LoadAResource(Word RezNum);
 LongWord ResourceLength(Word RezNum);
 void ReleaseAResource(Word RezNum);
 void KillAResource(Word RezNum);
-void SaveJunk(void *AckPtr,Word Length);
+
+typedef struct {
+	Word ID;
+	Word samplerate;
+	LongWord size;
+	void *data;
+} Sound;
+
+Sound *LoadSound(Word RezNum);
