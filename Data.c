@@ -31,6 +31,8 @@ Boolean selectheld;					/* Weapon select held down? */
 Boolean attackheld;					/* Attack button held down? */
 Boolean	buttonstate[NUMBUTTONS];	/* Current input */
 Word joystick1;						/* Joystick value */
+short joystickx=0;					/* Joystick X axis */
+short joysticky=0;					/* Joystick Y axis */
 int mousex;							/* Mouse x movement */
 int mousey;							/* Mouse y movement */
 int	mouseturn;						/* Mouse turn movement */

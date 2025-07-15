@@ -131,16 +131,16 @@ exit_t RunAutoMap(void)
 		if (newjoy & (JOYPAD_START|JOYPAD_SELECT|JOYPAD_A|JOYPAD_B|JOYPAD_X|JOYPAD_Y)) {
 			playstate = EX_STILLPLAYING;
 		}
-		if (newjoy & JOYPAD_UP && vy) {
+		if ((newjoy & JOYPAD_UP && vy) || (joysticky < -8000)) {
 			--vy;
 		}
-		if (newjoy & JOYPAD_LFT && vx) {
+		if ((newjoy & JOYPAD_LFT && vx) || (joystickx < -8000)) {
 			--vx;
 		}
-		if (newjoy & JOYPAD_RGT && vx<(MAPSIZE-1)) {
+		if ((newjoy & JOYPAD_RGT && vx<(MAPSIZE-1)) || (joystickx > 8000)) {
 			++vx;
 		}
-		if (newjoy & JOYPAD_DN && vy <(MAPSIZE-1)) {
+		if ((newjoy & JOYPAD_DN && vy <(MAPSIZE-1)) || (joysticky > 8000)) {
 			++vy;
 		}
 	}

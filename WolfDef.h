@@ -831,6 +831,8 @@ extern Boolean selectheld;				/* Weapon select held down */
 extern Boolean attackheld;				/* Attack button held down? */
 extern Boolean buttonstate[NUMBUTTONS];	/* Current input */
 extern Word joystick1;					/* Joystick value */
+extern short joystickx;					/* Joystick X axis */
+extern short joysticky;					/* Joystick Y axis */
 extern int mousex;						/* Mouse x movement */
 extern int mousey;						/* Mouse y movement */
 extern int mouseturn;					/* Mouse turn factor */

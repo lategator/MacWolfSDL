@@ -10,6 +10,7 @@ static const char *PrefApp = "macwolfsdl";
 static const char *PrefsFile = "macwolfsdl.ini";
 
 #define NAUDIOCHANS 5
+#define JOYDEADZONE 5000
 
 Word MacWidth = 0;				/* Width of play screen (Same as GameRect.right) */
 Word MacHeight = 0;				/* Height of play screen (Same as GameRect.bottom) */
@@ -51,9 +52,19 @@ void MacLoadSoundFont(void);
 
 void InitTools(void)
 {
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO))
+	SDL_JoystickID *Gamepads;
+	int NumGamepads;
+	int i;
+
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD))
 		BailOut("SDL_Init: %s", SDL_GetError());
 	SDL_SetAppMetadata("Wolfenstein 3D", "1.0", "wolf3dsnes");
+	Gamepads = SDL_GetGamepads(&NumGamepads);
+	if (Gamepads) {
+		for (i = 0; i < NumGamepads; i++)
+			SDL_OpenJoystick(Gamepads[i]);
+		SDL_free(Gamepads);
+	}
 	LoadPrefs();
 	fluid_set_log_function(FLUID_PANIC, FluidError, NULL);
 	fluid_set_log_function(FLUID_ERR, NULL, NULL);
@@ -129,6 +140,20 @@ void SetAPalettePtr(unsigned char *PalPtr)
 
 static void Cleanup(int status)
 {
+	SDL_JoystickID *Gamepads;
+	SDL_Gamepad *Gamepad;
+	int NumGamepads;
+	int i;
+
+	Gamepads = SDL_GetGamepads(&NumGamepads);
+	if (Gamepads) {
+		for (i = 0; i < NumGamepads; i++) {
+			Gamepad = SDL_GetGamepadFromID(Gamepads[i]);
+			if (Gamepad)
+				SDL_CloseGamepad(Gamepad);
+		}
+		SDL_free(Gamepads);
+	}
 	CloseAudio();
 	if (FluidPlayer)
 		delete_fluid_player(FluidPlayer);
@@ -235,6 +260,32 @@ void BlastScreen2(Rect *BlastRect)
 	BlastScreen();
 }
 
+Boolean ProcessGlobalEvent(SDL_Event *Event)
+{
+	SDL_Gamepad *Gamepad;
+	switch (Event->type) {
+		case SDL_EVENT_QUIT:
+			GoodBye();
+			__builtin_unreachable();
+		case SDL_EVENT_GAMEPAD_ADDED:
+			SDL_OpenGamepad(Event->gdevice.which);
+			return TRUE;
+		case SDL_EVENT_GAMEPAD_REMOVED:
+			Gamepad = SDL_GetGamepadFromID(Event->gdevice.which);
+			if (Gamepad)
+				SDL_CloseGamepad(Gamepad);
+			return TRUE;
+		case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+			if (Event->gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX)
+				joystickx = Event->gaxis.value;
+			else if (Event->gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY)
+				joysticky = Event->gaxis.value;
+			return TRUE;
+			break;
+	}
+	return FALSE;
+}
+
 /**********************************
 
 	Read from the keyboard/mouse system
@@ -261,16 +312,47 @@ typedef struct {
 	Word JoyValue;
 } Keys2Joy;
 
-static const Keys2Joy MenuKeyMatrix[] = {
-	{SDL_SCANCODE_UP,JOYPAD_UP},				/* Arrow up */
-	{SDL_SCANCODE_DOWN,JOYPAD_DN},				/* Arrow down */
-	{SDL_SCANCODE_LEFT,JOYPAD_LFT},				/* Arrow Left */
-	{SDL_SCANCODE_RIGHT,JOYPAD_RGT},				/* Arrow Right */
-	{ SDL_SCANCODE_SPACE,JOYPAD_A},				/* Space */
-	{ SDL_SCANCODE_RETURN,JOYPAD_A},				/* Return */
-	{ SDL_SCANCODE_KP_ENTER,JOYPAD_A},				/* keypad enter */
-	{ SDL_SCANCODE_ESCAPE,JOYPAD_B},				/* keypad enter */
+typedef struct {
+	SDL_GamepadButton Code;
+	Word JoyValue;
+} Pad2Joy;
+
+static const Pad2Joy GamepadMatrix[] = {
+	{SDL_GAMEPAD_BUTTON_DPAD_UP,JOYPAD_UP},
+	{SDL_GAMEPAD_BUTTON_DPAD_DOWN,JOYPAD_DN},
+	{SDL_GAMEPAD_BUTTON_DPAD_LEFT,JOYPAD_LFT},
+	{SDL_GAMEPAD_BUTTON_DPAD_RIGHT,JOYPAD_RGT},
+	{ SDL_GAMEPAD_BUTTON_SOUTH,JOYPAD_B},
+	{ SDL_GAMEPAD_BUTTON_EAST,JOYPAD_A},
+	{ SDL_GAMEPAD_BUTTON_NORTH,JOYPAD_X},
+	{ SDL_GAMEPAD_BUTTON_WEST,JOYPAD_Y},
+	{ SDL_GAMEPAD_BUTTON_BACK,JOYPAD_SELECT},
+	{ SDL_GAMEPAD_BUTTON_START,JOYPAD_START},
+	{ SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,JOYPAD_TR},
+	{ SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,JOYPAD_TL},
 };
+
+static const Keys2Joy MenuKeyMatrix[] = {
+	{SDL_SCANCODE_UP,JOYPAD_UP},
+	{SDL_SCANCODE_DOWN,JOYPAD_DN},
+	{SDL_SCANCODE_LEFT,JOYPAD_LFT},
+	{SDL_SCANCODE_RIGHT,JOYPAD_RGT},
+	{ SDL_SCANCODE_SPACE,JOYPAD_A},
+	{ SDL_SCANCODE_RETURN,JOYPAD_A},
+	{ SDL_SCANCODE_KP_ENTER,JOYPAD_A},
+	{ SDL_SCANCODE_ESCAPE,JOYPAD_B},
+};
+
+static const Pad2Joy MenuPadMatrix[] = {
+	{SDL_GAMEPAD_BUTTON_DPAD_UP,JOYPAD_UP},
+	{SDL_GAMEPAD_BUTTON_DPAD_DOWN,JOYPAD_DN},
+	{SDL_GAMEPAD_BUTTON_DPAD_LEFT,JOYPAD_LFT},
+	{SDL_GAMEPAD_BUTTON_DPAD_RIGHT,JOYPAD_RGT},
+	{ SDL_GAMEPAD_BUTTON_SOUTH,JOYPAD_A},
+	{ SDL_GAMEPAD_BUTTON_EAST,JOYPAD_B},
+	{ SDL_GAMEPAD_BUTTON_BACK,JOYPAD_B},
+};
+
 static const char *CheatPtr[] = {		/* Cheat strings */
 	"XUSCNIELPPA",
 	"IDDQD",
@@ -290,6 +372,7 @@ exit_t ReadSystemJoystick(void)
 	Word Index;
 	SDL_Event event;
 	const bool *Keys;
+	const Pad2Joy *PadPtr;
 	const SDL_Keycode *KeyPtr = KeyBinds;
 
 	joystick1 = 0;			/* Assume that joystick not moved */
@@ -299,9 +382,10 @@ exit_t ReadSystemJoystick(void)
 	PauseExited = FALSE;
 	SDL_PumpEvents();
 	while (SDL_PollEvent(&event)) {
-		if (event.type == SDL_EVENT_QUIT) {
-			GoodBye();
-		} else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+		if (ProcessGlobalEvent(&event))
+			continue;
+		SDL_ConvertEventToRenderCoordinates(SdlRenderer, &event);
+		if (event.type == SDL_EVENT_MOUSE_WHEEL) {
 			mousewheel += event.wheel.y;
 		} else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
 			mousebuttons |= SDL_BUTTON_MASK(event.button.button);
@@ -401,6 +485,28 @@ exit_t ReadSystemJoystick(void)
 			}
 			if (event.key.scancode == KeyBinds[8])
 				joystick1 = JOYPAD_START;
+		} else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+			PadPtr = GamepadMatrix;
+			for (i = 0; i < ARRAYLEN(GamepadMatrix); i++) {
+				if (PadPtr->Code == event.gbutton.button) {
+					if (!event.key.repeat || (PadPtr->JoyValue != JOYPAD_A && PadPtr->JoyValue != JOYPAD_B))
+						joystick1 |= PadPtr->JoyValue;
+					break;
+				}
+				PadPtr++;					/* Next index */
+			}
+		} else if (event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION) {
+			if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX) {
+				if (joystick1&JOYPAD_TR) {	/* Strafing? */
+					mousex += (event.gaxis.value - joystickx)/0x100;
+				} else {
+					mouseturn -= (event.gaxis.value - joystickx)/0x100;
+				}
+				joystickx = event.gaxis.value;
+			} else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY) {
+				mousey += (event.gaxis.value - joysticky)/0x100;
+				joysticky = event.gaxis.value;
+			}
 		} else if (event.type == SDL_EVENT_MOUSE_MOTION && MouseEnabled) {
 			if (joystick1&JOYPAD_TR) {	/* Strafing? */
 				mousex += event.motion.xrel;	/* Move horizontally for strafe */
@@ -442,15 +548,29 @@ int ReadMenuJoystick(void)
 	Word i;
 	SDL_Event event;
 	const Keys2Joy *KeyPtr;
+	const Pad2Joy *PadPtr;
+	int oldjoyx, oldjoyy;
 
 	joystick1 = 0;
 	mousewheel = 0;
 
 	SDL_PumpEvents();
 	while (SDL_PollEvent(&event)) {
-		if (event.type == SDL_EVENT_QUIT) {
-			GoodBye();
-		} else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+		oldjoyx = joystickx;
+		oldjoyy = joysticky;
+		if (ProcessGlobalEvent(&event)) {
+			if (joystickx >= JOYDEADZONE && oldjoyx < JOYDEADZONE)
+				joystick1 |= JOYPAD_RGT;
+			else if (joystickx <= -JOYDEADZONE && oldjoyx > JOYDEADZONE)
+				joystick1 |= JOYPAD_LFT;
+			if (joysticky >= JOYDEADZONE && oldjoyy < JOYDEADZONE)
+				joystick1 |= JOYPAD_DN;
+			else if (joysticky <= -JOYDEADZONE && oldjoyy > JOYDEADZONE)
+				joystick1 |= JOYPAD_UP;
+			continue;
+		}
+		SDL_ConvertEventToRenderCoordinates(SdlRenderer, &event);
+		if (event.type == SDL_EVENT_MOUSE_WHEEL) {
 			mousewheel += event.wheel.y;
 		} else if (event.type == SDL_EVENT_MOUSE_MOTION) {
 			mousex = event.motion.x;
@@ -459,6 +579,16 @@ int ReadMenuJoystick(void)
 			mousex = event.motion.x;
 			mousey = event.motion.y;
 			return event.button.button;
+		} else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+			PadPtr = MenuPadMatrix;
+			for (i = 0; i < ARRAYLEN(MenuPadMatrix); i++) {
+				if (PadPtr->Code == event.gbutton.button) {
+					if (!event.key.repeat || (PadPtr->JoyValue != JOYPAD_A && PadPtr->JoyValue != JOYPAD_B))
+						joystick1 |= PadPtr->JoyValue;
+					break;
+				}
+				PadPtr++;					/* Next index */
+			}
 		} else if (event.type == SDL_EVENT_KEY_DOWN) {
 			KeyPtr = MenuKeyMatrix;
 			for (i = 0; i < ARRAYLEN(MenuKeyMatrix); i++) {

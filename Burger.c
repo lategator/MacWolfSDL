@@ -89,8 +89,7 @@ void WaitTicks(Word Count)
 	for (; Count; Count--) {
 		WaitTick();
 		while (SDL_PollEvent(&event)) {
-			if (event.type == SDL_EVENT_QUIT)
-				GoodBye();
+			ProcessGlobalEvent(&event);
 		}
 	}
 }
@@ -133,12 +132,14 @@ int WaitTicksEvent(Word Time)
 
 	for (Word i = Time;; i--) {
 		while (SDL_PollEvent(&event)) {
-			if (event.type == SDL_EVENT_QUIT)
-				GoodBye();
-			else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+			if (ProcessGlobalEvent(&event))
+				continue;
+			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
 				return -event.button.button;
 			else if (event.type == SDL_EVENT_KEY_DOWN)
 				return event.key.key;
+			else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+				return 256-event.gbutton.button;
 		}
 		if (Time && !i)
 			break;

@@ -954,9 +954,9 @@ static int GetAKey(void)
 
 	SDL_PumpEvents();
 	while (SDL_PollEvent(&event)) {
-		if (event.type == SDL_EVENT_QUIT) {
-			GoodBye();
-		} else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+		if (ProcessGlobalEvent(&event))
+			continue;
+		if (event.type == SDL_EVENT_MOUSE_WHEEL) {
 			mousewheel += event.wheel.y;
 		} else if (event.type == SDL_EVENT_MOUSE_MOTION) {
 			mousex = event.motion.x;

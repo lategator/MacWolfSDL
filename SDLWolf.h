@@ -19,4 +19,5 @@ extern void BlitSurface(SDL_Surface *Surface, const SDL_Rect *rect);
 extern void BlitScreen(void);
 extern void StartUIOverlay(void);
 extern void EndUIOverlay(void);
+extern Boolean ProcessGlobalEvent(SDL_Event *Event);
 extern SDL_Surface *LoadPict(RFILE *Rp, Word PicNum);
