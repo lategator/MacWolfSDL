@@ -846,7 +846,8 @@ extern Word joystick1;					/* Joystick value */
 extern int mousex;						/* Mouse x movement */
 extern int mousey;						/* Mouse y movement */
 extern int mouseturn;					/* Mouse turn factor */
-extern int mousewheel;				/* Mouse wheel */
+extern int mousewheel;					/* Mouse wheel */
+extern int mousebuttons;				/* Mouse buttons */
 extern Word nextmap;					/* Next map to warp to */
 extern Word facecount;					/* Time to show a specific head */
 extern Word faceframe;					/* Head pic to show */

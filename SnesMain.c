@@ -146,6 +146,7 @@ Done:
 	mousex = 0;
 	mousey = 0;
 	mouseturn = 0;
+	mousebuttons = 0;
 	return PS;
 }
 
@@ -161,6 +162,10 @@ void StartGame(void)
 		NewGame();				/* init basic game stuff */
 	}
 	SetupPlayScreen();
+	mousex = 0;
+	mousey = 0;
+	mouseturn = 0;
+	mousebuttons = 0;
 	GameLoop();			/* Play the game */
 	UngrabMouse();
 	StopSong();			/* Make SURE music is off */

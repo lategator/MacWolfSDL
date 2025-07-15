@@ -264,7 +264,6 @@ exit_t ReadSystemJoystick(void)
 	Word i;
 	Word Index;
 	SDL_Event event;
-	SDL_MouseButtonFlags Buttons;
 	const bool *Keys;
 	const SDL_Keycode *KeyPtr = KeyBinds;
 
@@ -279,6 +278,10 @@ exit_t ReadSystemJoystick(void)
 			GoodBye();
 		} else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
 			mousewheel += event.wheel.y;
+		} else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+			mousebuttons |= SDL_BUTTON_MASK(event.button.button);
+		} else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+			mousebuttons &= ~SDL_BUTTON_MASK(event.button.button);
 		} else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_ESCAPE) {
 			PauseExited = TRUE;
 			return PauseMenu(TRUE);
@@ -392,11 +395,10 @@ exit_t ReadSystemJoystick(void)
 		KeyPtr++;					/* Next index */
 	} while (++i<sizeof KeyBinds/sizeof *KeyBinds);				/* All done? */
 	if (MouseEnabled) {
-		Buttons = SDL_GetMouseState(NULL, NULL);
-		if (Buttons & SDL_BUTTON_LMASK)
+		if (mousebuttons & SDL_BUTTON_LMASK)
 			joystick1 |= JOYPAD_B;
-		if (Buttons & SDL_BUTTON_RMASK)
-			joystick1 |= JOYPAD_A;
+		//if (mousebuttons & SDL_BUTTON_RMASK)
+			//joystick1 |= JOYPAD_A;
 	}
 
 	if (joystick1 & JOYPAD_X) {		/* Handle the side scroll (Special case) */

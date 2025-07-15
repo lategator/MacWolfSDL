@@ -1161,6 +1161,7 @@ exit_t PauseMenu(Boolean Shape)
 	mousex=0;		/* Discard unpausing events */
 	mousey=0;
 	mouseturn=0;
+	mousebuttons=0;
 	joystick1=0;
 	if (playstate == EX_STILLPLAYING)
 		GrabMouse();

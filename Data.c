@@ -35,6 +35,7 @@ int mousex;							/* Mouse x movement */
 int mousey;							/* Mouse y movement */
 int	mouseturn;						/* Mouse turn movement */
 int mousewheel;						/* Mouse wheel */
+int mousebuttons;					/* Mouse buttons */
 Word nextmap;						/* Next map to warp to */
 Word facecount;						/* Time to show a specific head */
 Word faceframe;						/* Head pic to show */
