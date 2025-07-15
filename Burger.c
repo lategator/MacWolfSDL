@@ -8,6 +8,7 @@
 
 #include "Burger.h"
 #include "WolfDef.h"		/* Get the prototypes */
+#include "res.h"
 #include <string.h>
 #include <stdio.h>
 #include <err.h>
@@ -252,12 +253,12 @@ void PlaySong(Word Song)
 		KilledSong = Song;
 		if (SystemState&MusicActive) {
 			if (Song!=LastSong) {
-				//BeginSongLooped(Song);	
+				//BeginSongLooped(Song);
 				LastSong = Song;
 			}
 			return;
 		}
-	} 
+	}
 	//EndSong();
 	LastSong = -1;
 }
@@ -585,14 +586,14 @@ void FadeToPtr(unsigned char *PalPtr)
 	Byte SrcPal[768];
 	Word Count;
 	Word i;
-	
+
 	if (!memcmp(PalPtr,&CurrentPal,768)) {	/* Same palette? */
 		return;
 	}
 	memcpy(SrcPal,CurrentPal,768);
 	i = 0;
 	do {		/* Convert the source palette to ints */
-		DestPalette[i] = PalPtr[i];			
+		DestPalette[i] = PalPtr[i];
 	} while (++i<768);
 
 	i = 0;
@@ -619,68 +620,87 @@ void FadeToPtr(unsigned char *PalPtr)
 **********************************/
 
 typedef struct {
-	LongWord Type;
-	Word ID;
-	LongWord Length;
-	void *Data;
+	void *data;
 } Resource;
 
-#define MAX_RESOURCES 1024
+static const char *MainResourceFile = "data/Wolf3D.rsrc";
+//static const char *LevelsFolder = "data/Levels";
+static const uint32_t ResType = 0x42524752; /* BRGR */
+static RFILE *MainResources = NULL;
+Resource *ResourceCache = NULL;
+static RFILE *LevelResources = NULL;
+Resource *LevelResourceCache = NULL;
 
-Resource Resources[MAX_RESOURCES] = {{0}};
-const char *MapSetName = "L1";
+static RFILE *LoadResources(const char *Filename, Resource **cache_out) {
+	size_t Count;
+	RFILE *Rp;
+	Resource *Cache;
 
-static Resource *GetResource(LongWord Type, Word ID)
+	Rp = res_open(Filename, 0);
+	if (!Rp)
+		return NULL;
+	Count = res_count(Rp, ResType); /* BRGR */
+	Cache = SDL_calloc(Count, sizeof(Resource));
+	if (!Cache) {
+		res_close(Rp);
+		return NULL;
+	}
+	*cache_out = Cache;
+	return Rp;
+}
+
+void InitResources(void)
 {
-	Resource *NewRes;
-	Resource *Res;
-	char filename[32];
-	FILE *File;
-	int i;
-	long Size;
-	LongWord StrType;
+	if (MainResources)
+		return;
+	MainResources = LoadResources(MainResourceFile, &ResourceCache);
+	if (!MainResources)
+		err(1, "%s", MainResourceFile);
+	LoadLevelResources("data/Levels/_Second_Encounter_(30_Levels).rsrc");
+}
 
-	NewRes = NULL;
-	Res = &Resources[0];
-	for (i = 0; i < MAX_RESOURCES; i++, Res++) {
-		if (!Res->Data) {
-			if (!NewRes)
-				NewRes = Res;
-		} else if (Res->Type == Type && Res->ID == ID) {
-			return Res;
-		}
+Boolean LoadLevelResources(const char *Filename)
+{
+	if (LevelResources) {
+		uint32_t Count = res_count(LevelResources, ResType);
+		res_close(LevelResources);
+		for (int i = 0; i < Count; i++)
+			if (LevelResourceCache[i].data)
+				SDL_free(LevelResourceCache[i].data);
+		SDL_free(ResourceCache);
+		ResourceCache = NULL;
 	}
-	if (!NewRes)
-		errx(1, "Too many resources loaded");
-	StrType = SwapLongBE(Type);
-	snprintf(filename, sizeof filename, "rsrc/%.4s_%d.rsrc", (char*)&StrType, ID);
-	File = fopen(filename, "rb");
-	if (!File) {
-		char filename2[32];
-		snprintf(filename2, sizeof filename, "rsrc/%s/%.4s_%d.rsrc", MapSetName, (char*)&StrType, ID);
-		File = fopen(filename2, "rb");
-		if (!File)
-			err(1, "%s: fopen", filename);
-		strcpy(filename, filename2);
+	LevelResources = LoadResources(Filename, &LevelResourceCache);
+	return LevelResources != NULL;
+}
+
+static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
+{
+	ResAttr Attr;
+	void *Data;
+
+	if (res_attr(Rp, ResType, RezNum, &Attr) == NULL)
+		return NULL;
+	if (Cache[Attr.index].data)
+		return Cache[Attr.index].data;
+	Data = SDL_malloc(Attr.size);
+	if (!Data)
+		return NULL;
+	if (!res_read_ind(Rp, ResType, Attr.index, Data, 0, Attr.size, NULL, NULL)) {
+		SDL_free(Data);
+		return NULL;
 	}
-	if (fseek(File, 0, SEEK_END))
-		err(1, "%s: fseek", filename);
-	Size = ftell(File);
-	if (Size < 0)
-		err(1, "%s: ftell", filename);
-	if (fseek(File, 0, SEEK_SET))
-		err(1, "%s: fseek", filename);
-	NewRes->Type = Type;
-	NewRes->ID = ID;
-	NewRes->Length = Size;
-	if (Size) {
-		NewRes->Data = SDL_malloc(Size);
-		if (fread(NewRes->Data, 1, Size, File) != Size)
-			err(1, "%s: fread", filename);
-	} else {
-		NewRes->Data = (void*)1;
-	}
-	return NewRes;
+	Cache[Attr.index].data = Data;
+	return Data;
+}
+
+static Resource *GetResource(Word RezNum)
+{
+	Resource *Res;
+	Res = GetResource2(RezNum, LevelResources, LevelResourceCache);
+	if (Res)
+		return Res;
+	return GetResource2(RezNum, MainResources, ResourceCache);
 }
 
 /**********************************
@@ -691,38 +711,25 @@ static Resource *GetResource(LongWord Type, Word ID)
 
 void *LoadAResource(Word RezNum)
 {
-	return(LoadAResource2(RezNum,'BRGR',NULL));
-}
-
-void *LoadAResourceLength(Word RezNum,LongWord *Length)
-{
-	return(LoadAResource2(RezNum,'BRGR',Length));
-}
-
-/**********************************
-
-	Load a global resource
-
-**********************************/
-
-void *LoadAResource2(Word RezNum,LongWord Type,LongWord *Length)
-{
-	Resource *MyHand;
 	Word Stage;
+	Resource *Res;
 
 	Stage = 0;
 	do {
 		Stage = FreeStage(Stage,128000);
-		MyHand = GetResource(Type,RezNum);
-		if (MyHand) {
-			if (Length)
-				*Length = MyHand->Length;
-			return MyHand->Data;
-		}
+		Res = GetResource(RezNum);
+		if (Res)
+			return Res;
 	} while (Stage);
-	if (Length)
-		*Length = 0;
 	return NULL;
+}
+
+LongWord ResourceLength(Word RezNum)
+{
+	ResAttr attr;
+	if (res_attr(MainResources, ResType, RezNum, &attr))
+		return attr.size;
+	return 0;
 }
 
 /**********************************
@@ -733,17 +740,18 @@ void *LoadAResource2(Word RezNum,LongWord Type,LongWord *Length)
 
 void ReleaseAResource(Word RezNum)
 {
-	ReleaseAResource2(RezNum,'BRGR');
-}
-
-/**********************************
-
-	Release a global resource
-
-**********************************/
-
-void ReleaseAResource2(Word RezNum,LongWord Type)
-{
+	ResAttr attr;
+	if (res_attr(LevelResources, ResType, RezNum, &attr)) {
+		if (LevelResourceCache[attr.index].data) {
+			SDL_free(LevelResourceCache[attr.index].data);
+			LevelResourceCache[attr.index].data = NULL;
+		}
+	} else if (res_attr(MainResources, ResType, RezNum, &attr)) {
+		if (ResourceCache[attr.index].data) {
+			SDL_free(ResourceCache[attr.index].data);
+			ResourceCache[attr.index].data = NULL;
+		}
+	}
 }
 
 /**********************************
@@ -754,31 +762,7 @@ void ReleaseAResource2(Word RezNum,LongWord Type)
 
 void KillAResource(Word RezNum)
 {
-	KillAResource2(RezNum,'BRGR');
-}
-
-/**********************************
-
-	Kill a global resource
-
-**********************************/
-
-void KillAResource2(Word RezNum,LongWord Type)
-{
-	Resource *Res;
-	int Size, i;
-
-	Res = &Resources[0];
-	for (i = 0; i < MAX_RESOURCES; i++, Res++) {
-		if (Res->Data && Res->Type == Type && Res->ID == RezNum) {
-			if (Res->Length)
-				SDL_free(Res->Data);
-			Res->Data = NULL;
-			Res->Length = 0;
-			Res->ID = 0;
-			Res->Type = 0;
-		}
-	}
+	ReleaseAResource(RezNum);
 }
 
 void SaveJunk(void *AckPtr,Word Length)

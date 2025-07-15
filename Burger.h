@@ -97,11 +97,10 @@ void FadeTo(Word PalNum);
 void FadeToBlack(void);
 void FadeToPtr(unsigned char *PalPtr);
 
+void InitResources(void);
+Boolean LoadLevelResources(const char *filename);
 void *LoadAResource(Word RezNum);
-void *LoadAResourceLength(Word RezNum,LongWord *Length);
+LongWord ResourceLength(Word RezNum);
 void ReleaseAResource(Word RezNum);
 void KillAResource(Word RezNum);
-void *LoadAResource2(Word RezNum,LongWord Type,LongWord *Length);
-void ReleaseAResource2(Word RezNum,LongWord Type);
-void KillAResource2(Word RezNum,LongWord Type);
 void SaveJunk(void *AckPtr,Word Length);

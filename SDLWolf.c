@@ -40,8 +40,10 @@ void InitTools(void)
 		errx(1, "SDL_Init");
 	//InitSoundMusicSystem(8,8,5,jxLowQuality);
 	//PurgeSongs(TRUE);			/* Allow songs to stay in memory */
-	SoundListPtr = (short int *) LoadAResourceLength(MySoundList, &Length);	/* Get the list of sounds */
-	for (i = 0; i < (Length>>1); i++)
+	InitResources();
+	SoundListPtr = (short int *) LoadAResource(MySoundList);	/* Get the list of sounds */
+	Length = ResourceLength(MySoundList)>>1;
+	for (i = 0; i < Length; i++)
 		SoundListPtr[i] = SwapShortBE(SoundListPtr[i]);
 	RegisterSounds(SoundListPtr);
 	GetTableMemory();
@@ -56,11 +58,13 @@ void InitTools(void)
 		Info->ScenarioNum = SwapUShortBE(Info->ScenarioNum);
 		Info->FloorNum = SwapUShortBE(Info->FloorNum);
 	}
-	SongListPtr = (unsigned short *) LoadAResourceLength(rSongList, &Length);
-	for (i = 0; i < (Length>>1); i++)
+	SongListPtr = (unsigned short *) LoadAResource(rSongList);
+	Length = ResourceLength(rSongList)>>1;
+	for (i = 0; i < Length; i++)
 		SongListPtr[i] = SwapUShortBE(SongListPtr[i]);
-	WallListPtr = (unsigned short *) LoadAResourceLength(MyWallList, &Length);
-	for (i = 0; i < (Length>>1); i++)
+	WallListPtr = (unsigned short *) LoadAResource(MyWallList);
+	Length = ResourceLength(MyWallList)>>1;
+	for (i = 0; i < Length; i++)
 		WallListPtr[i] = SwapUShortBE(WallListPtr[i]);
 	if (MapListPtr->MaxMap==3) {	/* Shareware version? */
 		DoMyAlert(ShareWareWin);	/* Show the shareware message */
