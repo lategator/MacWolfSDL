@@ -1,4 +1,4 @@
-#include "Wolfdef.h"
+#include "WolfDef.h"
 #include <string.h>
 
 /**********************************

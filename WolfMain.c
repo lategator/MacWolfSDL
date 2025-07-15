@@ -1,4 +1,4 @@
-#include "wolfdef.h"
+#include "WolfDef.h"
 #include <string.h>
 
 /**********************************
@@ -7,7 +7,7 @@
 	
 **********************************/
 
-Word w_abs(int val)
+Word w_abs(short val)
 {
 	return val>=0 ? val : -val;
 }
@@ -334,6 +334,7 @@ void PlayLoop(void)
 	LongWord Timer;
 	LastTicCount = ReadTick();
 	do {
+		WaitTick();
 		Timer = ReadTick();		/* How much time has elapsed */
 		TicCount = (Timer-LastTicCount);
 		gamestate.playtime += TicCount;	/* Add the physical time to the elapsed time */
@@ -444,7 +445,7 @@ skipbrief:
 			ReleaseMap();		/* Unload the map */
 			Intermission();				/* Display the wrapup... */
 			ShareWareEnd();			/* End the game for the shareware version */
-/*			VictoryIntermission();		/* Wrapup for victory! */
+/*			VictoryIntermission();	*/	/* Wrapup for victory! */
 			return;
 		}
 		ReleaseMap();				/* Unload the game map */

@@ -121,7 +121,7 @@ Word tantoangle[513] = {
 
 void GetTableMemory(void) 
 {
-	#ifdef __MAC__		/* Only the mac version will calculate the tables */
+	#if 1		/* Only the mac version will calculate the tables */
 						/* All other versions will load precalc'd tables from disk */
 	scaleatzptr = (Word *)AllocSomeMem(sizeof(Word)*MAXZ);
 	viewangletox = (short *)AllocSomeMem(sizeof(short)*FINEANGLES/2);

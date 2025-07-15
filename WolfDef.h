@@ -1,5 +1,4 @@
-#ifndef __WOLFDEF__
-#define __WOLFDEF__
+#pragma once
 
 #define DEMO		/* Define if this is the lame demo for dealers */
 
@@ -25,11 +24,13 @@ typedef unsigned short angle_t;		/* Must be short to allow wraparound */
 typedef short fixed_t;				/* 8.8 fixed point number */	
 typedef unsigned short ufixed_t;	/* 8.8 unsigned fixed point number */
 
-#include <burger.h>		/* My standard system equates */
+#include "Burger.h"		/* My standard system equates */
 #include "States.h"		/* Think state equates */
 #include "Sounds.h"		/* Sound equates */
 #include "Sprites.h"	/* Sprite indexs */
 #include "Wolf.h"		/* Resource maps */
+#define TRUE 1
+#define FALSE 0
 
 /**********************************
 
@@ -67,7 +68,7 @@ typedef unsigned short ufixed_t;	/* 8.8 unsigned fixed point number */
 #define	ANGLE90		0x4000		/* Use a 0x10000 angle range */
 #define	ANGLE180	0x8000		/* Use a 0x10000 angle range */
 
-#ifdef __MAC__
+#ifndef FIXEDRESOLUTION
 #define	SCREENWIDTH	MacWidth		/* Size of the offscreen buffer */
 #define SCREENHEIGHT MacHeight	/* Height of the offscreen buffer */
 #define VIEWHEIGHT MacViewHeight		/* Height of the viewing area */
@@ -337,23 +338,13 @@ typedef struct {
 	unsigned short children[2];
 } savenode_t;
 
-#ifndef __BIGENDIAN__
-typedef struct {
-	Byte	plane;		/* in half tiles*/
-	Byte	dir;
-	Byte	min,max;	/* in half tiles*/
-	Byte	texture;
-	Byte	area;
-} saveseg_t;
-#else
 typedef struct {
 	Byte	plane;			/* in half tiles*/
 	Byte	dir;
-	Byte	max,min;		/* in half tiles*/
-	Byte	area;
+	Byte	min,max;		/* in half tiles*/
 	Byte	texture;
+	Byte	area;
 } saveseg_t;
-#endif
 
 /**********************************
 
@@ -365,7 +356,7 @@ typedef struct {
 /* Used by the renderer, must match the header of static_t, actor_t, missile_t */
 
 typedef struct {
-	int	x,y;		/* Item's x,y */
+	Word	x,y;		/* Item's x,y */
 	Word sprite;	/* Item's shape */
 	Word areanumber;	/* Item's visible area */
 } thing_t;
@@ -421,7 +412,7 @@ typedef struct {
 	Word pwallx,pwally;					/* the tile the pushwall edge is in now*/
 	Word pwallcheckx,pwallchecky;		/* the tile it will be in next*/
 	Word pwalldir;
-	int pwallxchange, pwallychange;  	/* adjust coordinates this much*/
+	short pwallxchange, pwallychange;  	/* adjust coordinates this much*/
 } pushwall_t;
 
 /**********************************
@@ -447,7 +438,7 @@ typedef struct {
 typedef struct {
 	void *pos;				/* position of sprite info */
 	ufixed_t columnstep;	/* Step factor for width scale */
-	int x1,x2;				/* Left x, Right x */
+	short x1,x2;				/* Left x, Right x */
 	Word actornum;			/* 0 if a static sprite / missile*/
 	Word clipscale;			/* Size of sprite (Scale number) */
 } vissprite_t;
@@ -510,7 +501,7 @@ typedef struct {		/* Must match thing_t */
 	Word areanumber;	/* Area missile is in */
 	Word type;			/* Also used as a ticcount for explosions */
 	Word flags;			/* Who can I hit? (If zero then explosion) */
-	int	xspeed,yspeed;	/* Direction of travel */
+	short	xspeed,yspeed;	/* Direction of travel */
 } missile_t;
 
 /**********************************
@@ -536,7 +527,7 @@ extern Word rw_midpoint;
 extern Word rw_mintex;
 extern Word rw_maxtex;
 extern Byte *rw_texture;
-extern int	rw_centerangle;
+extern short	rw_centerangle;
 extern Boolean	rw_downside;		/* True for dir_east and dir_south*/
 extern Byte *ArtData[64];
 extern Byte textures[MAPSIZE*2+5][MAPSIZE]; /* 0-63 is horizontal, 64-127 is vertical*/
@@ -544,10 +535,17 @@ extern Byte textures[MAPSIZE*2+5][MAPSIZE]; /* 0-63 is horizontal, 64-127 is ver
 
 /* In Mac.c, 3DO.c, AppleIIgs.c */
 
+struct Rect {
+  short               top;
+  short               left;
+  short               bottom;
+  short               right;
+};
+typedef struct Rect                     Rect;
+
 extern void InitTools(void);
 extern void BlastScreen(void);
 extern void BlastScreen2(Rect *BlastRect);
-extern void DoMacEvents(void);
 extern void BailOut(void);
 extern void GoodBye(void);
 extern void ReadSystemJoystick(void);
@@ -723,7 +721,7 @@ extern void StartSong(Word songnum);
 
 /* In WolfMain.c */
 
-extern Word w_abs(int v);
+extern Word w_abs(short v);
 extern Byte rndtable[256];
 extern Word rndindex;
 extern Word w_rnd(void);
@@ -757,7 +755,7 @@ extern fixed_t	SUFixedMul(fixed_t a, ufixed_t b);
 extern fixed_t	FixedDiv(fixed_t a, fixed_t b);
 extern fixed_t R_TransformX(fixed_t x,fixed_t y);
 extern fixed_t R_TransformZ(fixed_t x,fixed_t y);
-extern Word ScaleFromGlobalAngle(int visangle,int distance);
+extern Word ScaleFromGlobalAngle(short visangle,short distance);
 extern void DrawAutomap(Word tx,Word ty);
 extern Boolean StartupRendering(Word NewSize);
 extern void NewMap(void);
@@ -820,7 +818,7 @@ extern missile_t missiles[MAXMISSILES];		/* Data for the missile items */
 extern Word numactors;						/* Number of active actors */
 extern actor_t actors[MAXACTORS];			/* Data for the actors */
 extern t_compscale *AllScalers[MAXSCALER];	/* Pointers to all the compiled scalers */	
-extern Byte **GameShapes;		/* Pointer to the game shape array */
+extern Byte *GameShapes[57];		/* Pointer to the game shape array */
 extern Word difficulty;					/* 0 = easy, 1= normal, 2=hard*/
 extern gametype_t gamestate;			/* Status of the game (Save game) */
 extern exit_t playstate;				/* Current status of the game */
@@ -842,8 +840,8 @@ extern Word elevatorx,elevatory;		/* x,y of the elevator */
 extern Word firstframe;					/* if non 0, the screen is still faded out */
 extern Word OldMapNum;					/* Currently loaded map # */
 extern loadmap_t *MapPtr;				/* Pointer to current loaded map */
-extern int clipshortangle;				/* Angle for the left edge of the screen */
-extern int clipshortangle2;				/* clipshortangle * 2 */
+extern short clipshortangle;				/* Angle for the left edge of the screen */
+extern short clipshortangle2;				/* clipshortangle * 2 */
 extern classinfo_t classinfo[];			/* Class information for all bad guys */
 extern Word viewx;						/* X coord of camera */
 extern Word viewy;						/* Y coord of camera */
@@ -871,10 +869,10 @@ extern Word GameViewSize;	/* Size of the game screen */
 extern Boolean IntermissionHack;	/* Hack for preventing double score drawing during intermission */
 extern Word NoWeaponDraw;		/* Flag to not draw the weapon on the screen */
 extern maplist_t *MapListPtr;		/* Pointer to map info record */
+extern short *SoundListPtr;	/* Pointer to sound list record */
 extern unsigned short *SongListPtr;	/* Pointer to song list record */
 extern unsigned short *WallListPtr;	/* Pointer to wall list record */
 extern Word MaxScaler;			/* Maximum number of VALID scalers */
 extern Word NaziSound[];		/* Sounds for nazis starting */
 extern Boolean ShowPush;		/* Cheat for showing pushwalls on automap */
 
-#endif /* __WOLFDEF__ */

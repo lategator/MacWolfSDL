@@ -1,3 +1,5 @@
+#pragma once
+
 #define	MyMenuBar	128				/* application's menu bar */
 
 #define	rAboutAlert	128				/* about alert */

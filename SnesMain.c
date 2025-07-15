@@ -1,8 +1,6 @@
 #include "WolfDef.h"
-#include <string.h>
-#include <stdlib.h>
 #include <setjmp.h>
-#include <ctype.h>
+#include <SDL3/SDL_main.h>
 
 /**********************************
 
@@ -52,7 +50,8 @@ void RunAutoMap(void)
 	}
 	oldjoy = joystick1;
 	do {
-		ClearTheScreen(BLACK);
+		WaitTick();
+		ClearTheScreen(0x2f);
 		DrawAutomap(vx,vy);
 		do {
 			ReadSystemJoystick();
@@ -110,7 +109,6 @@ void StartGame(void)
 
 Boolean TitleScreen (void)
 {
-	Word RetVal;		/* Value to return */
 	LongWord PackLen;
 	LongWord *PackPtr;
 	Byte *ShapePtr;
@@ -119,7 +117,7 @@ Boolean TitleScreen (void)
 	NewGameWindow(1);	/* Set to 512 mode */
 	FadeToBlack();		/* Fade out the video */
 	PackPtr = LoadAResource(rTitlePic);
-	PackLen = PackPtr[0];
+	PackLen = SwapLongBE(PackPtr[0]);
 	ShapePtr = (Byte *)AllocSomeMem(PackLen);
 	DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLen);
 	DrawShape(0,0,ShapePtr);
@@ -129,7 +127,7 @@ Boolean TitleScreen (void)
 	StartSong(SongListPtr[0]);
 	FadeTo(rTitlePal);	/* Fade in the picture */
 	BlastScreen();
-	RetVal = WaitTicksEvent(0);		/* Wait for event */
+	WaitTicksEvent(0);		/* Wait for event */
 	playstate = EX_COMPLETED;
 	return TRUE;				/* Return True if canceled */
 }
@@ -144,7 +142,7 @@ jmp_buf ResetJmp;
 Boolean JumpOK;
 extern Word NumberIndex;
 
-void main(void)
+int main()
 {
 	InitTools();		/* Init the system environment */
 	WaitTick();			/* Wait for a system tick to go by */
@@ -155,7 +153,6 @@ void main(void)
 		goto DoGame;	/* Begin a new game or saved game */
 	}
 	JumpOK = TRUE;		/* Jump vector is VALID */
-	FlushKeys();		/* Allow a system event */
 	Intro();			/* Do the game intro */
 	for (;;) {
 		if (TitleScreen()) {		/* Show the game logo */

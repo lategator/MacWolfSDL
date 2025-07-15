@@ -1,4 +1,4 @@
-#include "wolfdef.h"
+#include "WolfDef.h"
 
 /**********************************
 
@@ -162,6 +162,9 @@ void GiveAmmo(Word ammo)
 				gamestate.pendingweapon = WP_CHAINGUN;
 			}
 		}
+		break;
+	default:
+		break;
 	}
 }
 

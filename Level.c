@@ -1,4 +1,4 @@
-#include "wolfdef.h"
+#include "WolfDef.h"
 #include <string.h>
 
 /* static object info*/
@@ -574,12 +574,10 @@ Boolean SetupGameLevel(void)
 		return FALSE;		/* Uh.. yeah... */
 	}
 	DrawPsyched(1);		/* First stage done */
-#ifdef __BIGENDIAN__
-	MapPtr->numspawn = SwapUShort(MapPtr->numspawn);	/* Fix for 68000 machines */
-	MapPtr->spawnlistofs = SwapUShort(MapPtr->spawnlistofs);
-	MapPtr->numnodes = SwapUShort(MapPtr->numnodes);
-	MapPtr->nodelistofs = SwapUShort(MapPtr->nodelistofs);
-#endif
+	MapPtr->numspawn = SwapUShortLE(MapPtr->numspawn);	/* Fix for 68000 machines */
+	MapPtr->spawnlistofs = SwapUShortLE(MapPtr->spawnlistofs);
+	MapPtr->numnodes = SwapUShortLE(MapPtr->numnodes);
+	MapPtr->nodelistofs = SwapUShortLE(MapPtr->nodelistofs);
 	numstatics = 0;		/* Clear out the static array */
 	numdoors = 0;		/* Clear out the door array */
 	numactors = 1;		/* player has spot 0*/

@@ -1,9 +1,7 @@
 #include "WolfDef.h"
 #include <string.h>
-#include "SoundMusicSystem.h"
-#include "mixedmode.h"
 
-Word ScaleDiv[2048];			/* Divide table for scalers */
+LongWord ScaleDiv[2048];			/* Divide table for scalers */
 
 /**********************************
 
@@ -39,66 +37,46 @@ void ReleaseScalers(void)
 
 	Draw a vertical line with a scaler
 	(Used for WALL drawing)
-	This is now in assembly language
 	
 **********************************/
 
-/* void ScaleGlue(void *a,t_compscale *b,void *c); */
-void ScaleGlue(void *a,Word b,void *c,Word d,Word e,Word f,Word g);
-/*
-; R3 = ArtPtr
-; R4 = Maxlines
-; R5 = ScreenPtr
-; R6 = Frac
-; R7 = Integer
-; R8 = VideoWidth
-; R9 = Delta
-*/
-
-#if 0
-void IO_ScaleWallColumn(Word x,Word scale,LongWord column)
+void IO_ScaleWallColumn(Word X,Word Scale,Word Tile,Word Column)
 {
-	Word TheFrac;
-	Word TheInt;
-	Word y;
-	Byte *ArtStart;
-	
-	if (scale) {		/* Uhh.. Don't bother */
-		scale*=2;
-		TheFrac = 0x80000000UL / scale;
+	Byte *ScreenPtr, *ArtStart;
+	LongWord Frac, Integer, Delta, i;
+	Word Width;
 
-		ArtStart = &ArtData[(column>>7)&0x3f][(column&127)<<7];
-		if (scale<VIEWHEIGHT) {
-			y = (VIEWHEIGHT-scale)/2;
-			TheInt = TheFrac>>24;
-			TheFrac <<= 8;
-			ScaleGlue(ArtStart,scale,
-				&VideoPointer[(y*VideoWidth)+x],
-				TheFrac,
-				TheInt,
-				VideoWidth,
-				0
-			);
-			return;
-		}
-		y = (scale-VIEWHEIGHT)/2;		/* How manu lines to remove */
-		y = y*TheFrac;
-		TheInt = TheFrac>>24;
-		TheFrac <<= 8;
-		ScaleGlue(&ArtStart[y>>24],VIEWHEIGHT,
-			&VideoPointer[x],
-			TheFrac,
-			TheInt,
-			VideoWidth,
-			y<<8
-		);
+	if (!Scale)
+		return;
+	Width = VideoWidth;
+	ScreenPtr = VideoPointer + X;
+	ArtStart = &ArtData[Tile][Column << 7];
+	Frac = ScaleDiv[Scale];
+	Integer = Frac >> 24;
+
+	Scale <<= 1;
+	if (Scale < VIEWHEIGHT) {
+		i = Scale;
+		Delta = 0;
+		ScreenPtr += ((VIEWHEIGHT - Scale) >> 1) * Width;
+	} else {
+		i = VIEWHEIGHT;
+		Delta = ((Scale - VIEWHEIGHT) >> 1) * Frac;
+		ArtStart += Delta >> 24;
+		Delta <<= 8;
+	}
+	Frac <<= 8;
+	for (; i > 0; i--) {
+		*ScreenPtr = *ArtStart;
+		ArtStart += Integer + __builtin_add_overflow(Delta, Frac, &Delta);
+		ScreenPtr += Width;
 	}
 }
-#endif
+
 /**********************************
 
 	Draw a vertical line with a masked scaler
-	(Used for SPRITE drawing)
+(Used for SPRITE drawing)
 	
 **********************************/
 
@@ -108,70 +86,72 @@ typedef struct {
 	unsigned short Shape;
 } SpriteRun;
 
-void SpriteGlue(Byte *a,Word b,Word c,Byte *d,Word e,Word f);
-/*
-SGArtStart	EQU	R3		;Pointer to the 6 byte run structure
-SGFrac	EQU	R4		;Pointer to the scaler
-SGInteger	EQU R5		;Pointer to the video
-SGScreenPtr	EQU	R6		;Pointer to the run base address
-SGCount	EQU R7
-SGDelta	EQU	R8
-*/
+void SpriteGlue(Byte *ArtStart,LongWord Frac,LongWord Integer,Byte *ScreenPtr,Word Count,LongWord Delta, Word Width)
+{
+	for (; Count > 0; Count--) {
+		*ScreenPtr = *ArtStart;
+		ArtStart += Integer + __builtin_add_overflow(Delta, Frac, &Delta);
+		ScreenPtr += Width;
+	}
+}
 
 void IO_ScaleMaskedColumn(Word x,Word scale,unsigned short *CharPtr,Word column) 
 {
 	Byte * CharPtr2;
 	int Y1,Y2;
 	Byte *Screenad;
-	SpriteRun *RunPtr;
-	Word TheFrac;
-	Word TFrac;
-	Word TInt;
-	Word RunCount;
+	const SpriteRun *RunPtr;
+	LongWord TheFrac;
+	LongWord TFrac;
+	LongWord TInt;
+	LongWord RunCount;
 	int TopY;
-	Word Index;
-	Word Delta;
+	LongWord Index;
+	LongWord Delta;
+	Word Width;
 	
 	if (!scale) {
 		return;
 	}
 	CharPtr2 = (Byte *) CharPtr;
 	TheFrac = ScaleDiv[scale];		/* Get the scale fraction */ 
-	RunPtr = (SpriteRun *) &CharPtr[CharPtr[column+1]/2];	/* Get the offset to the RunPtr data */
+	RunPtr = (const SpriteRun *) &CharPtr[SwapUShortBE(CharPtr[column+1])/2];	/* Get the offset to the RunPtr data */
 	Screenad = &VideoPointer[x];		/* Set the base screen address */
 	TFrac = TheFrac<<8;
 	TInt = TheFrac>>24;
-	TopY = (VIEWHEIGHT/2)-scale;		/* Number of pixels for 128 pixel shape */
+	TopY = (int)(VIEWHEIGHT/2)-scale;		/* Number of pixels for 128 pixel shape */
+	Width = VideoWidth;
 
-	while (RunPtr->Topy != (unsigned short) -1) {		/* Not end of record? */
-		Y1 = scale*(LongWord)RunPtr->Topy/128+TopY;
+	while (SwapUShortBE(RunPtr->Topy) != (unsigned short) -1) {		/* Not end of record? */
+		Y1 = scale*(LongWord)SwapUShortBE(RunPtr->Topy)/128+TopY;
 		if (Y1<(int)VIEWHEIGHT) {		/* Clip top? */
-		Y2 = scale*(LongWord)RunPtr->Boty/128+TopY;
-		if (Y2>0) {
-		
-		if (Y2>(int)VIEWHEIGHT) {
-			Y2 = VIEWHEIGHT;
-		}
-		Index = RunPtr->Shape+(RunPtr->Topy/2);
-		Delta = 0;
-		if (Y1<0) {
-			Delta = (0-(Word)Y1)*TheFrac;
-			Index += (Delta>>24);
-			Delta <<= 8;
-			Y1 = 0;
-		}
-		RunCount = Y2-Y1;
-		if (RunCount) {
-			SpriteGlue(
-			&CharPtr2[Index],	/* Pointer to art data */
-			TFrac,				/* Fractional value */ 
-			TInt,				/* Integer value */
-			&Screenad[Y1*VideoWidth],			/* Pointer to screen */
-			RunCount,			/* Number of lines to draw */
-			Delta					/* Delta value */
-			);
-		}
-		}
+			Y2 = scale*(LongWord)SwapUShortBE(RunPtr->Boty)/128+TopY;
+			if (Y2>0) {
+
+				if (Y2>(int)VIEWHEIGHT) {
+					Y2 = VIEWHEIGHT;
+				}
+				Index = SwapUShortBE(RunPtr->Shape)+(SwapUShortBE(RunPtr->Topy)/2);
+				Delta = 0;
+				if (Y1<0) {
+					Delta = -Y1*TheFrac;
+					Index += (Delta>>24);
+					Delta <<= 8;
+					Y1 = 0;
+				}
+				RunCount = Y2-Y1;
+				if (RunCount) {
+					SpriteGlue(
+						&CharPtr2[Index],	/* Pointer to art data */
+						TFrac,				/* Fractional value */ 
+						TInt,				/* Integer value */
+						&Screenad[Y1*Width],			/* Pointer to screen */
+						RunCount,			/* Number of lines to draw */
+						Delta,					/* Delta value */
+						Width
+					);
+				}
+			}
 		} 
 		RunPtr++;						/* Next record */
 	}	
@@ -268,4 +248,5 @@ void KillSmallFont(void)
 		SmallFontPtr=0;		
 	}
 }
+
 

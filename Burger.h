@@ -1,9 +1,11 @@
-typedef unsigned int Word;
-typedef unsigned long LongWord;
-#ifndef __MACTYPES__
-typedef unsigned char Byte;
-typedef unsigned char Boolean;
-#endif
+#pragma once
+
+#include <stdint.h>
+
+typedef uint16_t Word;
+typedef uint32_t LongWord;
+typedef uint8_t Byte;
+typedef uint8_t Boolean;
 
 #define BLACK 255
 #define DARKGREY 250
@@ -22,8 +24,6 @@ typedef unsigned char Boolean;
 #define LIGHTGREY 43
 #define WHITE 0
 
-#define __MAC__
-#define __BIGENDIAN__
 #define SfxActive 1
 #define MusicActive 2
 
@@ -32,20 +32,30 @@ typedef unsigned char Boolean;
 #define SetFileType(x,y)
 
 extern unsigned char *VideoPointer;
-extern Word KeyModifiers;
-extern Word ScanCode;
+//extern Word ScanCode;
 extern Word KilledSong;
 extern Word SystemState;
 extern Word VideoWidth;
 extern LongWord LastTick;
 extern LongWord YTable[480];
-extern Handle RezHandle;
 
-void DLZSS(Byte *Dest, Byte *Src,LongWord Length);
-void DLZB(Byte *Dest, Byte *Src,LongWord Length);
-LongWord SwapLong(LongWord Val);
-unsigned short SwapUShort(unsigned short Val);
-short SwapShort(short Val);
+void DLZSS(Byte *restrict Dest,const Byte *restrict Src,LongWord Length);
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define SwapLongLE(__x) __builtin_bswap32(__x)
+#define SwapUShortLE(__x) __builtin_bswap16(__x)
+#define SwapShortLE(__x) ((int16_t)(__builtin_bswap16(__x)))
+#define SwapLongBE(__x) ((uint32_t)(__x))
+#define SwapUShortBE(__x) ((uint16_t)(__x))
+#define SwapShortBE(__x) ((int16_t)(__x))
+#else
+#define SwapLongLE(__x) ((uint32_t)(__x))
+#define SwapUShortLE(__x) ((uint16_t)(__x))
+#define SwapShortLE(__x) ((int16_t)(__x))
+#define SwapLongBE(__x) __builtin_bswap32(__x)
+#define SwapUShortBE(__x) __builtin_bswap16(__x)
+#define SwapShortBE(__x) ((int16_t)(__builtin_bswap16(__x)))
+#endif
 
 void WaitTick(void);
 void WaitTicks(Word TickCount);
@@ -54,12 +64,6 @@ Word WaitEvent(void);
 LongWord ReadTick(void);
 void *AllocSomeMem(LongWord Size);
 void FreeSomeMem(void *MemPtr);
-
-Word GetAKey(void);
-Word AllKeysUp(void);
-Word WaitKey(void);
-void FlushKeys(void);
-Word FixMacKey(EventRecord *MyRecord);
 
 void SoundOff(void);
 void PlaySound(Word SndNum);
@@ -94,9 +98,10 @@ void FadeToBlack(void);
 void FadeToPtr(unsigned char *PalPtr);
 
 void *LoadAResource(Word RezNum);
+void *LoadAResourceLength(Word RezNum,LongWord *Length);
 void ReleaseAResource(Word RezNum);
 void KillAResource(Word RezNum);
-void *LoadAResource2(Word RezNum,LongWord Type);
+void *LoadAResource2(Word RezNum,LongWord Type,LongWord *Length);
 void ReleaseAResource2(Word RezNum,LongWord Type);
 void KillAResource2(Word RezNum,LongWord Type);
 void SaveJunk(void *AckPtr,Word Length);

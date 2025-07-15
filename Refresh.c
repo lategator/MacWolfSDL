@@ -21,7 +21,7 @@ saveseg_t *pwallseg;				/* pushwall in motion*/
 fixed_t	FixedByFrac (fixed_t a, fixed_t b)
 {
 	fixed_t	c;
-	c = ((long)a * (long)b)>>FRACBITS;
+	c = ((int32_t)a * (int32_t)b)>>FRACBITS;
 	return c;
 }
 
@@ -29,14 +29,14 @@ fixed_t	FixedByFrac (fixed_t a, fixed_t b)
 fixed_t	SUFixedMul (fixed_t a, ufixed_t b)
 {
 	fixed_t	c;
-	c = ((long)a * (long)b)>>FRACBITS;
+	c = ((int32_t)a * (int32_t)b)>>FRACBITS;
 	return c;
 }
 
 /* -8.8 / -8.8 = -8.8*/
 fixed_t	FixedDiv (fixed_t a, fixed_t b)
 {
-	a = (long)(((long)a<<FRACBITS) / (long)b);
+	a = (int32_t)(((int32_t)a<<FRACBITS) / (int32_t)b);
 	return a;
 }
 
@@ -74,9 +74,9 @@ fixed_t R_TransformZ(fixed_t x,fixed_t y)
 	
 **********************************/
 
-Word ScaleFromGlobalAngle(int visangle,int distance)
+Word ScaleFromGlobalAngle(short visangle,short distance)
 {
-	fixed_t	tz;
+	int32_t	tz;
 
 	Word anglea, angleb;
 	Word sinea, sineb;
@@ -87,11 +87,12 @@ Word ScaleFromGlobalAngle(int visangle,int distance)
 	sinea = finesine[anglea];	/* bothe sines are always positive*/
 	sineb = finesine[angleb];
 	
-	tz = ((long)distance * sinea) / sineb;
+	tz = ((int32_t)distance * sinea) / sineb;
 
-	if (tz>=MAXZ) {		/* Make sure it's not too big... */
+	if (tz < 0)
+		tz = 0;
+	else if (tz>=MAXZ)		/* Make sure it's not too big... */
 		tz = MAXZ-1;
-	}
 	return scaleatzptr[tz];		/* Return the size */
 }
 
@@ -190,12 +191,12 @@ void DrawAutomap(Word tx,Word ty)
 
 Boolean StartupRendering(Word NewSize)
 {
-#ifdef __MAC__
+#if 1
 	int		i;
 	Word minz;
 	int		x;
 	float	a, fv;
-	long	t;
+	int32_t	t;
 	LongWord focallength;
 	Word j;
 	Word *ScalePtr;
@@ -205,7 +206,7 @@ Boolean StartupRendering(Word NewSize)
 		return TRUE;
 	}
 	
-#ifdef __MAC__		/* Only the mac version will calculate the tables */
+#if 1		/* Only the mac version will calculate the tables */
 
 /* generate scaleatz*/
 
@@ -220,11 +221,11 @@ Boolean StartupRendering(Word NewSize)
 
 /* viewangle tangent table*/
 
-	if (MathSize==-1) {		/* Only needs to be done once */
+	if (MathSize==(Word)-1) {		/* Only needs to be done once */
 		i = 0;
 		do {
 			a = (i-FINEANGLES/4+0.1)*PI*2/FINEANGLES;
-			fv = 256*tan(a);
+			fv = 256*tanf(a);
 			if (fv>0x7fff) {
 				t = 0x7fff;
 			} else if (fv<-0x7fff) {
@@ -240,7 +241,7 @@ Boolean StartupRendering(Word NewSize)
 		i = 0;
 		do {
 			a = (i+0.0)*PI*2/FINEANGLES;
-			t = 256*sin(a);
+			t = 256*sinf(a);
 			if (t>255) {
 				t = 255;
 			}
@@ -258,7 +259,7 @@ Boolean StartupRendering(Word NewSize)
 	focallength = (SCREENWIDTH/2)<<FRACBITS/finetangent[FINEANGLES/4+FIELDOFVIEW/2];
 	i = 0;
 	do {
-		t = ((long) finetangent[i]*(long)focallength)>>FRACBITS;
+		t = ((int32_t) finetangent[i]*(int32_t)focallength)>>FRACBITS;
 		t = (int)SCREENWIDTH/2 - t;
 		if (t < -1) {
 			t = -1;
@@ -341,7 +342,7 @@ void NewMap(void)
 {
 	Word x,y, tile;
 	Byte *src;
-#ifdef __BIGENDIAN__
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 	savenode_t *FixPtr;
 #endif
 	memset(textures,0xff,128*64);	/* clear array so pushwall spawning can insert*/
@@ -361,12 +362,14 @@ void NewMap(void)
 	} while (++y<MAPSIZE);
 	
 	nodes = (savenode_t *)((Byte *)MapPtr + MapPtr->nodelistofs);
-#ifdef __BIGENDIAN__
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 	y = MapPtr->numnodes;
 	FixPtr = nodes;
 	while (y) {
-		FixPtr->children[0] = SwapUShort(FixPtr->children[0]);	/* Swap endian on all offsets */
-		FixPtr->children[1] = SwapUShort(FixPtr->children[1]);
+		if (!(FixPtr->dir & DIR_SEGFLAG)) {
+			FixPtr->children[0] = SwapUShortLE(FixPtr->children[0]);	/* Swap endian on all offsets */
+			FixPtr->children[1] = SwapUShortLE(FixPtr->children[1]);
+		}
 		++FixPtr;
 		--y;
 	}	

@@ -180,13 +180,13 @@ void AddSprite (thing_t *thing,Word actornum)
 	}
 	scale = scaleatzptr[tz];	/* Get the scale at the z coord */
 	tx = R_TransformX(trx,try);	/* Get the screen x coord */
-	px = ((tx*(long)scale)>>7) + CENTERX;	/* Use 32 bit precision! */
+	px = ((tx*(int32_t)scale)>>7) + CENTERX;	/* Use 32 bit precision! */
 
 /* calculate edges of the shape */
 
 	patch = SpriteArray[thing->sprite];	/* Pointer to the sprite info */
 	
-	width =((LongWord)patch[0]*scale)>>6; 	/* Get the width of the shape */
+	width =((LongWord)SwapUShortBE(patch[0])*scale)>>6; 	/* Get the width of the shape */
 	if (!width) {
 		return;		/* too far away*/
 	}
@@ -199,11 +199,11 @@ void AddSprite (thing_t *thing,Word actornum)
 		return;		/* off the left side*/
 	}
 	VisPtr = &vissprites[numvisspr];
-	VisPtr->pos = &patch[0];	/* Sprite info offset */
+	VisPtr->pos = patch;	/* Sprite info offset */
 	VisPtr->x1 = x1;			/* Min x */
 	VisPtr->x2 = x2;			/* Max x */
 	VisPtr->clipscale = scale;	/* Size to draw */
-	VisPtr->columnstep = (patch[0]<<8)/width; /* Step for width scale */
+	VisPtr->columnstep = (SwapUShortBE(patch[0])<<8)/width; /* Step for width scale */
 	VisPtr->actornum = actornum;	/* Actor who this is (0 for static) */
 
 /* pack the vissprite number into the low 6 bits of the scale for sorting */
@@ -231,7 +231,7 @@ void DrawTopSprite(void)
 
 		patch = SpriteArray[topspritenum];		/* Get the info on the shape */
 		
-		width = (patch[0]*topspritescale)>>7;		/* Adjust the width */
+		width = (SwapUShortBE(patch[0])*topspritescale)>>7;		/* Adjust the width */
 		if (!width) {	
 			return;		/* Too far away */
 		}
@@ -247,7 +247,7 @@ void DrawTopSprite(void)
 		VisRecord.x1 = x1;			/* Left edge */
 		VisRecord.x2 = x2;			/* Right edge */
 		VisRecord.clipscale = topspritescale;	/* Size */
-		VisRecord.columnstep = (patch[0]<<8)/(x2-x1+1);	/* Width step */
+		VisRecord.columnstep = (SwapUShortBE(patch[0])<<8)/(x2-x1+1);	/* Width step */
 
 /* Make sure it is sorted to be drawn last */
 

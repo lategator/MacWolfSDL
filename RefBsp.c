@@ -1,4 +1,5 @@
 #include "WolfDef.h"
+#include <stdio.h>
 
 static Word checkcoord[11][4] = {	/* Indexs to the bspcoord table */
 {3,0,2,1},
@@ -96,10 +97,10 @@ void RenderWallRange (Word start,Word stop,saveseg_t *seg,Word distance)
 	if (x2 == x1) {
 		return;		/* less than one column wide*/
 	}
-	rw_scale = (long) ScaleFromGlobalAngle(start+centershort,distance)<<FRACBITS;
+	rw_scale = (int32_t) ScaleFromGlobalAngle(start+centershort,distance)<<FRACBITS;
 	if (x2>x1+1) {
-		scale2 = (long) ScaleFromGlobalAngle(stop+centershort,distance)<<FRACBITS;
-		rw_scalestep = (long)(scale2-rw_scale)/(long)(x2-x1);
+		scale2 = (int32_t) ScaleFromGlobalAngle(stop+centershort,distance)<<FRACBITS;
+		rw_scalestep = (int32_t)(scale2-rw_scale)/(int32_t)(x2-x1);
 	}
 	RenderWallLoop(x1,x2,distance);
 }

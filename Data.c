@@ -1,4 +1,4 @@
-#include "wolfdef.h"
+#include "WolfDef.h"
 
 /**********************************
 
@@ -18,7 +18,7 @@ Word nummissiles;					/* Number of active missiles */
 missile_t missiles[MAXMISSILES];	/* Data for the missile items */
 Word numactors;						/* Number of active actors */
 actor_t actors[MAXACTORS];			/* Data for the actors */
-unsigned char **GameShapes;			/* Pointer to the game shape array */
+unsigned char *GameShapes[57];			/* Pointer to the game shape array */
 Word difficulty;					/* 0 = easy, 1= normal, 2=hard*/
 gametype_t gamestate;				/* Status of the game (Save game) */
 exit_t playstate;					/* Current status of the game */
@@ -40,8 +40,8 @@ Word elevatorx,elevatory;			/* x,y of the elevator */
 Word firstframe;					/* if non 0, the screen is still faded out */
 Word OldMapNum;						/* Currently loaded map # */
 loadmap_t *MapPtr;					/* Pointer to current loaded map */
-int clipshortangle;					/* Angle for the left edge of the screen */
-int clipshortangle2;				/* clipshortangle * 2 */
+short clipshortangle;					/* Angle for the left edge of the screen */
+short clipshortangle2;				/* clipshortangle * 2 */
 Word viewx;							/* X coord of camera */
 Word viewy;							/* Y coord of camera */
 fixed_t	viewsin;					/* Base sine for viewing angle */
@@ -68,7 +68,7 @@ Word rw_mintex;
 LongWord rw_scalestep;
 Word rw_midpoint;
 Boolean rw_downside;
-int rw_centerangle;
+short rw_centerangle;
 Byte *rw_texture;
 LongWord rw_scale;
 Byte *ArtData[64];
@@ -76,9 +76,10 @@ void *SpriteArray[S_LASTONE];
 Word MacVidSize = -1;
 Word SlowDown = 1;			/* Force the game to 15 hz */
 Word MouseEnabled = 0;		/* Allow mouse control */
-Word GameViewSize = 0;		/* Size of the game screen */
+Word GameViewSize = 3;		/* Size of the game screen */
 Word NoWeaponDraw=1;			/* Flag to not draw the weapon on the screen */
 maplist_t *MapListPtr;		/* Pointer to map info record */
+short *SoundListPtr;	/* Pointer to sound list record */
 unsigned short *SongListPtr;	/* Pointer to song list record */
 unsigned short *WallListPtr;	/* Pointer to wall list record */
 Word MaxScaler = 1;			/* Maximum number of VALID scalers */

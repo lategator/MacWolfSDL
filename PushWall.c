@@ -1,4 +1,4 @@
-#include "wolfdef.h"
+#include "WolfDef.h"
 
 #define PWALLSPEED 4		/* Micropixels per 60th of a second */
 

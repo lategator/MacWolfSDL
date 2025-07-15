@@ -6,13 +6,13 @@
 
 **********************************/
 
+#include "Burger.h"
 #include "WolfDef.h"		/* Get the prototypes */
 #include <string.h>
-#include <sound.h>
 #include <stdio.h>
-#include <palettes.h>
-#include "SoundMusicSystem.h"
-#include "PickAMonitor.h"
+#include <err.h>
+//#include "SoundMusicSystem.h"
+#include <SDL3/SDL.h>
 
 /**********************************
 
@@ -20,19 +20,16 @@
 
 **********************************/
 
-Word DoEvent(EventRecord *event);
-void DoMacEvents(void);
+Word DoEvent(SDL_Event *event);
 void BlastScreen(void);
 static Word FreeStage(Word Stage,LongWord Size);
 
-extern Boolean MouseHit;		/* True if a mouse down event occured */
 Word NoSystemMem;
 unsigned char *VideoPointer;	/* Pointer to video memory */
 extern Word QuitFlag;			/* Did the application quit? */
 Word VideoWidth;				/* Width to each video scan line */
 Word SystemState=3;				/* Sound on/off flags */
 Word KilledSong;				/* Song that's currently playing */
-Word KeyModifiers;				/* Keyboard modifier flags */
 LongWord LastTick;				/* Last system tick (60hz) */
 Word FontX;						/* X Coord of font */
 Word FontY;						/* Y Coord of font */
@@ -45,13 +42,13 @@ Word FontLoaded;				/* Rez number of loaded font (0 if none) */
 Word FontInvisible;				/* Allow masking? */
 unsigned char FontOrMask[16];	/* Colors for font */
 LongWord YTable[480];			/* Offsets to the screen */
-SndChannelPtr myPaddleSndChan;	/* Sound channel */
-Word ScanCode;
-CWindowPtr GameWindow;
-CGrafPtr GameGWorld;
-extern GDHandle gMainGDH;
-extern CTabHandle MainColorHandle;
-extern Boolean DoQuickDraw;
+//SndChannelPtr myPaddleSndChan;	/* Sound channel */
+//Word ScanCode;
+//CWindowPtr GameWindow;
+//CGrafPtr GameGWorld;
+//extern GDHandle gMainGDH;
+//extern CTabHandle MainColorHandle;
+//extern Boolean DoQuickDraw;
 
 /**********************************
 
@@ -59,35 +56,27 @@ extern Boolean DoQuickDraw;
 
 **********************************/
 
-static Word QuickTicker;
-
-void DoMacEvents(void)
-{
-	EventRecord MyEvent;
-	if (!DoQuickDraw) {
-		if ((ReadTick() - QuickTicker) < 30) {
-			return;
-		}
-		QuickTicker = ReadTick();
-	}
-	PurgeAllSounds(85000);		/* Try to keep some memory free */
-	if (WaitNextEvent2(updateMask|diskMask|driverMask|networkMask|activMask|app4Mask,&MyEvent,0,0)) {
-		DoEvent(&MyEvent);
-	}
-}
 
 /**********************************
 
 	Wait a single system tick
 
 **********************************/
+
+#define TICK_NS (1000000000ULL / 60ULL)
 
 void WaitTick(void)
 {
-	do {
-		DoMacEvents();			/* Allow backgrounding */
-	} while (ReadTick()==LastTick);	/* Tick changed? */
-	LastTick=ReadTick();		/* Save it */
+	Uint64 Delay, Ticks;
+
+	Ticks = SDL_GetTicksNS();
+	Delay = (LastTick + 1) * TICK_NS - Ticks;
+	if (((Sint64) Delay) > 0) {
+		SDL_DelayNS(Delay);
+		LastTick = Ticks / TICK_NS + 1;
+	} else {
+		LastTick = Ticks / TICK_NS;
+	}
 }
 
 /**********************************
@@ -97,15 +86,19 @@ void WaitTick(void)
 
 **********************************/
 
+#define TICK_NS (1000000000ULL / 60ULL)
+
 void WaitTicks(Word Count)
 {
-	LongWord TickMark;		/* Temp tick mark */
-	
-	do {
-		DoMacEvents();		/* Allow other tasks to execute */
-		TickMark = ReadTick();	/* Get the mark */
-	} while ((TickMark-LastTick)<=Count);	/* Time up? */
-	LastTick = TickMark;	/* Save the new time mark */
+	SDL_Event event;
+
+	for (; Count; Count--) {
+		WaitTick();
+		while (SDL_PollEvent(&event)) {
+			if (event.type == SDL_EVENT_QUIT)
+				GoodBye();
+		}
+	}
 }
 
 /**********************************
@@ -116,7 +109,7 @@ void WaitTicks(Word Count)
 
 LongWord ReadTick(void)
 {
-	return(TickCount());	/* Just get it from the Mac OS */
+	return(SDL_GetTicksNS() * 60 / 1000000000ULL);	/* Just get it from the Mac OS */
 }
 
 /**********************************
@@ -142,123 +135,22 @@ Word WaitEvent(void)
 
 Word WaitTicksEvent(Word Time)
 {
-	LongWord TickMark;
-	LongWord NewMark;
-	Word RetVal;
+	SDL_Event event;
 
-	MouseHit = FALSE;
-	TickMark = ReadTick();	/* Get the initial time mark */
-	for (;;) {
-		DoMacEvents();		/* Allow other tasks a shot! */
-		NewMark = ReadTick();		/* Get the new time mark */
-		if (Time) {
-			if ((NewMark-TickMark)>=Time) {	/* Time up? */
-				RetVal = 0;	/* Return timeout */
-				break;
-			}
+	for (Word i = Time;; i--) {
+		while (SDL_PollEvent(&event)) {
+			if (event.type == SDL_EVENT_QUIT)
+				GoodBye();
+			else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+				return 0;
+			else if (event.type == SDL_EVENT_KEY_DOWN)
+				return event.key.key;
 		}
-		RetVal = GetAKey();
-		if (RetVal) {
+		if (Time && !i)
 			break;
-		}
-		if (MouseHit) {
-			RetVal = 1;		/* Hit the mouse */
-			break;
-		}
-	}
-	LastTick = NewMark;
-	return RetVal;
-}
-
-/**********************************
-
-	Get a key from the keyboard
-
-**********************************/
-
-Word GetAKey(void)
-{
-	EventRecord MyRecord;
-
-	if (WaitNextEvent2(everyEvent,&MyRecord,0,0)) {
-		if (!DoEvent(&MyRecord)) {
-			KeyModifiers = MyRecord.modifiers;
-			return 0;
-		}
-		return FixMacKey(&MyRecord);
+		WaitTick();
 	}
 	return 0;
-}
-
-/**********************************
-
-	Check if all keys are released
-
-**********************************/
-
-Word WaitKey(void)
-{
-	Word Key;
-	do {
-		Key = GetAKey();
-	} while (!Key);
-	return (Key);
-}
-
-/**********************************
-
-	Check if all keys are released
-
-**********************************/
-
-Word AllKeysUp(void)
-{
-	KeyMap KeyArray;
-
-	GetKeys(KeyArray);
-	if (KeyArray[0] || KeyArray[1] || KeyArray[2] || KeyArray[3]) {
-		return 0;
-	}
-	return 1;
-}
-
-Word FixMacKey(EventRecord *Event)
-{
-	Word NewKey;
-	NewKey = Event->message & 0xff;
-	ScanCode = (Event->message>>8) & 0xff;
-	switch (NewKey) {
-	case 0x1c :
-		NewKey = 0x08;
-		break;
-	case 0x1d :
-		NewKey = 0x15;
-		break;
-	case 0x1e :
-		NewKey = 0x0b;
-		break;
-	case 0x1f :
-		NewKey = 0x0a;
-		break;
-	}
-	KeyModifiers = Event->modifiers;
-	if (NewKey == 'Q' || NewKey == 'q') {
-		if (KeyModifiers & cmdKey) {
-			QuitFlag = 1;
-		}
-	}
-	return NewKey;
-}	
-			
-/**********************************
-
-	Flush out the keyboard buffer
-
-**********************************/
-
-void FlushKeys(void)
-{
-	while (GetAKey()) {}
 }
 
 /**********************************
@@ -333,11 +225,11 @@ void PlaySound(Word SoundNum)
 	if (SoundNum && (SystemState&SfxActive)) {
 		SoundNum+=127;
 		if (SoundNum&0x8000) {		/* Mono sound */
-			EndSound(SoundNum&0x7fff);
+			//EndSound(SoundNum&0x7fff);
 		}
-		BeginSound(SoundNum&0x7fff,11127<<17L);
+		//BeginSound(SoundNum&0x7fff,11127<<17L);
 	} else {
-		EndAllSound();
+		//EndAllSound();
 	}
 }
 
@@ -349,7 +241,7 @@ void PlaySound(Word SoundNum)
 
 void StopSound(Word SoundNum)
 {
-	EndSound(SoundNum+127);
+	//EndSound(SoundNum+127);
 }
 
 static Word LastSong = -1;
@@ -360,13 +252,13 @@ void PlaySong(Word Song)
 		KilledSong = Song;
 		if (SystemState&MusicActive) {
 			if (Song!=LastSong) {
-				BeginSongLooped(Song);	
+				//BeginSongLooped(Song);	
 				LastSong = Song;
 			}
 			return;
 		}
 	} 
-	EndSong();
+	//EndSong();
 	LastSong = -1;
 }
 
@@ -412,8 +304,8 @@ void DrawShape(Word x,Word y,void *ShapePtr)
 	Word Width2;
 
 	ShapePtr3 = ShapePtr;
-	Width = ShapePtr3[0];		/* 16 bit width */
-	Height = ShapePtr3[1];		/* 16 bit height */
+	Width = SwapUShortBE(ShapePtr3[0]);		/* 16 bit width */
+	Height = SwapUShortBE(ShapePtr3[1]);		/* 16 bit height */
 	ShapePtr2 = (unsigned char *) &ShapePtr3[2];
 	ScreenPtr = (unsigned char *) &VideoPointer[YTable[y]+x];
 	do {
@@ -469,8 +361,8 @@ void DrawXMShape(Word x,Word y,void *ShapePtr)
 {
 	unsigned short *ShapePtr2;
 	ShapePtr2 = ShapePtr;
-	x += ShapePtr2[0];
-	y += ShapePtr2[1];
+	x += SwapUShortBE(ShapePtr2[0]);
+	y += SwapUShortBE(ShapePtr2[1]);
 	DrawMShape(x,y,&ShapePtr2[2]);
 }
 
@@ -635,152 +527,6 @@ void ClearTheScreen(Word Color)
 
 /**********************************
 
-	Draw a text string
-
-**********************************/
-
-void DrawAString(char *TextPtr)
-{
-	while (TextPtr[0]) {		/* At the end of the string? */
-		DrawAChar(TextPtr[0]);	/* Draw the char */
-		++TextPtr;			/* Continue */
-	}
-}
-
-/**********************************
-
-	Set the X/Y to the font system
-
-**********************************/
-
-void SetFontXY (Word x,Word y)
-{
-	FontX = x;
-	FontY = y;
-}
-
-/**********************************
-
-	Make color zero invisible
-
-**********************************/
-
-void FontUseMask(void)
-{
-	FontInvisible = 0;
-	FontSetColor(0,0);
-}
-
-/**********************************
-
-	Make color zero a valid color
-
-**********************************/
-
-void FontUseZero(void)
-{
-	FontInvisible = -1;
-	FontSetColor(0,BLACK);
-}
-
-/**********************************
-
-	Set the color entry for the font
-
-**********************************/
-
-void FontSetColor(Word Num,Word Color)
-{
-	FontOrMask[Num] = Color;
-}
-
-/**********************************
-
-	Install a font into memory
-
-**********************************/
-
-typedef struct FontStruct {
-	unsigned short FHeight;
-	unsigned short FLast;
-	unsigned short FFirst;
-	unsigned char FData;
-} FontStruct;
-
-void InstallAFont(Word FontNum)
-{
-	FontStruct *FPtr;
-
-	if (FontLoaded) {
-		if (FontLoaded == FontNum) {
-			return;
-		}
-		ReleaseAResource(FontLoaded);
-	}
-	FontLoaded = FontNum;
-	FPtr = LoadAResource(FontNum);
-	FontHeight = SwapUShort(FPtr->FHeight);
-	FontLast = SwapUShort(FPtr->FLast);
-	FontFirst = SwapUShort(FPtr->FFirst);
-	FontWidths = &FPtr->FData;
-	FontPtr = &FontWidths[FontLast];
-}
-
-/**********************************
-
-	Draw a char to the screen
-
-**********************************/
-
-void DrawAChar(Word Letter)
-{
-	Word XWidth;
-	Word Offset;
-	Word Width;
-	Word Height;
-	int Width2;
-	unsigned char *Font;
-	unsigned char *ScreenPtr;
-	unsigned char *Screenad;
-	unsigned char *FontOr;
-	Word Temp;
-	Word Temp2;
-
-	Letter -= FontFirst;		/* Offset from the first entry */
-	if (Letter>=FontLast) {		/* In the font? */
-		return;					/* Exit then! */
-	}
-	XWidth = FontWidths[Letter];	/* Get the pixel width of the entry */
-	Width = (XWidth-1)/2;
-	Font = &FontPtr[Letter*2];
-	Offset = (Font[1]*256) + Font[0];
-	Font = &FontPtr[Offset];
-	ScreenPtr = (unsigned char *) &VideoPointer[YTable[FontY]+FontX];
-	FontX+=XWidth;
-	Height = FontHeight;
-	FontOr = &FontOrMask[0];
-
-	do {
-		Screenad = ScreenPtr;
-		Width2 = Width;
-		do {
-			Temp = *Font++;
-			Temp2 = Temp>>4;
-			if (Temp2 != FontInvisible) {
-				Screenad[0] = FontOr[Temp2];
-			}
-			Temp &= 0x0f;
-			if (Temp != FontInvisible) {
-				Screenad[1] = FontOr[Temp];
-			}
-			Screenad+=2;		/* Next address */
-		} while(--Width2>=0);
-		ScreenPtr += VideoWidth;
-	} while (--Height);
-}
-
-/**********************************
-
 	Palette Manager
 
 **********************************/
@@ -795,51 +541,6 @@ void SetAPalette(Word PalNum)
 {
 	SetAPalettePtr(LoadAResource(PalNum));		/* Set the current palette */
 	ReleaseAResource(PalNum);					/* Release the resource */
-}
-
-/**********************************
-
-	Load and set a palette from a pointer
-
-**********************************/
-
-Byte CurrentPal[768];
-
-void SetAPalettePtr(unsigned char *PalPtr)
-{
-	CTabHandle ColorHandle;		/* Handle to the main palette */
-	Handle PalHand;			/* Handle to palette */
-	Word i;					/* Temp */
-	CSpecArray *Colors;		/* Pointer to color array */
-	GDHandle OldDevice;
-	
-	memcpy(CurrentPal,PalPtr,768);
-	ColorHandle = MainColorHandle;
-	HLock((Handle) ColorHandle);
-	Colors = &(*ColorHandle)->ctTable;
-	++Colors;		/* Go to color #0 */
-	i = 1;			/* Skip color #0 */
-	PalPtr+=3;
-	do {			/* Fill in all the color entries */
-		Colors[0]->rgb.red = (Word) (PalPtr[0]<<8) | PalPtr[0];
-		Colors[0]->rgb.green = (Word) (PalPtr[1]<<8) | PalPtr[1];
-		Colors[0]->rgb.blue = (Word) (PalPtr[2]<<8) | PalPtr[2];
-		if (!Colors[0]->rgb.blue) {
-			Colors[0]->rgb.blue = 0x0101;
-		}
-	    PalPtr+=3;
-	    ++Colors;
-	} while (++i<255);	/* All done? */
-	OldDevice = GetGDevice();
-	SetGDevice(gMainGDH);
-	SetEntries(0,255-1,(*ColorHandle)->ctTable);	/* Set the color entries */
-	PalHand = (Handle) (**(*GameGWorld).portPixMap).pmTable;
-	PtrToXHand(*ColorHandle,PalHand,8+(8*256));
-	PalHand = (Handle) (**(*GameWindow).portPixMap).pmTable;
-	PtrToXHand(*ColorHandle,PalHand,8+(8*256));
-	HUnlock((Handle)ColorHandle);	/* Release the main handle */
-	MakeITable(0,0,0);				/* Create the proper color table */
-	SetGDevice(OldDevice);
 }
 
 /**********************************
@@ -875,6 +576,8 @@ void FadeTo(Word RezNum)
 
 **********************************/
 
+extern Byte CurrentPal[768];
+
 void FadeToPtr(unsigned char *PalPtr)
 {
 	int DestPalette[768];				/* Dest offsets */
@@ -904,6 +607,7 @@ void FadeToPtr(unsigned char *PalPtr)
 			WorkPalette[i] = ((DestPalette[i] * (int)(Count)) / 16) + SrcPal[i];
 		} while (++i<768);
 		SetAPalettePtr(WorkPalette);
+		BlastScreen();
 		WaitTicks(1);
 	} while (++Count<17);
 }
@@ -914,15 +618,85 @@ void FadeToPtr(unsigned char *PalPtr)
 
 **********************************/
 
+typedef struct {
+	LongWord Type;
+	Word ID;
+	LongWord Length;
+	void *Data;
+} Resource;
+
+#define MAX_RESOURCES 1024
+
+Resource Resources[MAX_RESOURCES] = {{0}};
+const char *MapSetName = "L1";
+
+static Resource *GetResource(LongWord Type, Word ID)
+{
+	Resource *NewRes;
+	Resource *Res;
+	char filename[32];
+	FILE *File;
+	int i;
+	long Size;
+	LongWord StrType;
+
+	NewRes = NULL;
+	Res = &Resources[0];
+	for (i = 0; i < MAX_RESOURCES; i++, Res++) {
+		if (!Res->Data) {
+			if (!NewRes)
+				NewRes = Res;
+		} else if (Res->Type == Type && Res->ID == ID) {
+			return Res;
+		}
+	}
+	if (!NewRes)
+		errx(1, "Too many resources loaded");
+	StrType = SwapLongBE(Type);
+	snprintf(filename, sizeof filename, "rsrc/%.4s_%d.rsrc", (char*)&StrType, ID);
+	File = fopen(filename, "rb");
+	if (!File) {
+		char filename2[32];
+		snprintf(filename2, sizeof filename, "rsrc/%s/%.4s_%d.rsrc", MapSetName, (char*)&StrType, ID);
+		File = fopen(filename2, "rb");
+		if (!File)
+			err(1, "%s: fopen", filename);
+		strcpy(filename, filename2);
+	}
+	if (fseek(File, 0, SEEK_END))
+		err(1, "%s: fseek", filename);
+	Size = ftell(File);
+	if (Size < 0)
+		err(1, "%s: ftell", filename);
+	if (fseek(File, 0, SEEK_SET))
+		err(1, "%s: fseek", filename);
+	NewRes->Type = Type;
+	NewRes->ID = ID;
+	NewRes->Length = Size;
+	if (Size) {
+		NewRes->Data = SDL_malloc(Size);
+		if (fread(NewRes->Data, 1, Size, File) != Size)
+			err(1, "%s: fread", filename);
+	} else {
+		NewRes->Data = (void*)1;
+	}
+	return NewRes;
+}
+
 /**********************************
 
 	Load a personal resource
 
 **********************************/
 
-void *LoadAResource(Word RezNum) 
+void *LoadAResource(Word RezNum)
 {
-	return(LoadAResource2(RezNum,'BRGR'));
+	return(LoadAResource2(RezNum,'BRGR',NULL));
+}
+
+void *LoadAResourceLength(Word RezNum,LongWord *Length)
+{
+	return(LoadAResource2(RezNum,'BRGR',Length));
 }
 
 /**********************************
@@ -931,24 +705,24 @@ void *LoadAResource(Word RezNum)
 
 **********************************/
 
-Handle RezHandle;
-
-void *LoadAResource2(Word RezNum,LongWord Type)
+void *LoadAResource2(Word RezNum,LongWord Type,LongWord *Length)
 {
-	Handle MyHand;
+	Resource *MyHand;
 	Word Stage;
-	
+
 	Stage = 0;
 	do {
 		Stage = FreeStage(Stage,128000);
 		MyHand = GetResource(Type,RezNum);
 		if (MyHand) {
-			RezHandle = MyHand;
-			HLock(MyHand);
-			return *MyHand;
+			if (Length)
+				*Length = MyHand->Length;
+			return MyHand->Data;
 		}
 	} while (Stage);
-	return 0;
+	if (Length)
+		*Length = 0;
+	return NULL;
 }
 
 /**********************************
@@ -970,11 +744,6 @@ void ReleaseAResource(Word RezNum)
 
 void ReleaseAResource2(Word RezNum,LongWord Type)
 {
-	Handle MyHand;
-	
-	MyHand = GetResource(Type,RezNum);	/* Get the resource if available */
-	HUnlock(MyHand);	
-	HPurge(MyHand);			/* Mark handle as purgeable */
 }
 
 /**********************************
@@ -996,9 +765,20 @@ void KillAResource(Word RezNum)
 
 void KillAResource2(Word RezNum,LongWord Type)
 {
-	Handle MyHand;
-	MyHand = GetResource(Type,RezNum);	/* Get the resource if available */
-	ReleaseResource(MyHand);
+	Resource *Res;
+	int Size, i;
+
+	Res = &Resources[0];
+	for (i = 0; i < MAX_RESOURCES; i++, Res++) {
+		if (Res->Data && Res->Type == Type && Res->ID == RezNum) {
+			if (Res->Length)
+				SDL_free(Res->Data);
+			Res->Data = NULL;
+			Res->Length = 0;
+			Res->ID = 0;
+			Res->Type = 0;
+		}
+	}
 }
 
 void SaveJunk(void *AckPtr,Word Length)
@@ -1015,29 +795,18 @@ static Word Count=1;
 
 /**********************************
 
-	Kill a global resource
-
-**********************************/
-
-unsigned short SwapUShort(unsigned short Val)
-{
-	return ((Val<<8) | (Val>>8));
-}
-
-/**********************************
-
 	Decompress using LZSS
 
 **********************************/
 
 #if 1
-void DLZSS(Byte *Dest,Byte *Src,LongWord Length)
+void DLZSS(Byte * restrict Dest,const Byte * restrict Src,LongWord Length)
 {
 	Word BitBucket;
 	Word RunCount;
 	Word Fun;
 	Byte *BackPtr;
-	
+
 	if (!Length) {
 		return;
 	}
@@ -1064,12 +833,14 @@ void DLZSS(Byte *Dest,Byte *Src,LongWord Length)
 			} while (--RunCount);
 			Src+=2;
 		}
+		if (Length == 0)
+			break;
 		BitBucket>>=1;
 		if (BitBucket==1) {
 			BitBucket = (Word)Src[0] | 0x100;
 			++Src;
 		}
-	} while (Length);
+	} while (1);
 }
 #endif
 
@@ -1081,21 +852,7 @@ void DLZSS(Byte *Dest,Byte *Src,LongWord Length)
 
 void *AllocSomeMem(LongWord Size)
 {
-	void *MemPtr;
-	Word Stage;
-	
-	Stage = 0;
-	do {
-		Stage = FreeStage(Stage,Size);
-		MemPtr = NewPtr(Size);		/* Get some memory */
-		if (MemPtr) {
-			return MemPtr;			/* Return it */
-		}
-	} while (Stage);
-	if (!NoSystemMem) {
-		MemPtr = NewPtrSys(Size);
-	}
-	return MemPtr;
+	return SDL_malloc(Size);
 }
 
 /**********************************
@@ -1104,20 +861,20 @@ void *AllocSomeMem(LongWord Size)
 
 **********************************/
 
-static Word FreeStage(Word Stage,LongWord Size) 
+static Word FreeStage(Word Stage,LongWord Size)
 {
 	switch (Stage) {
 	case 1:
-		PurgeAllSounds(Size);		/* Kill off sounds until I can get memory */
+		//PurgeAllSounds(Size);		/* Kill off sounds until I can get memory */
 		break;
 	case 2:
-		PlaySound(0);				/* Shut down all sounds... */
-		PurgeAllSounds(Size);		/* Purge them */
+		//PlaySound(0);				/* Shut down all sounds... */
+		//PurgeAllSounds(Size);		/* Purge them */
 		break;
 	case 3:
-		PlaySong(0);				/* Kill music */
-		FreeSong();					/* Purge it */
-		PurgeAllSounds(Size);		/* Make SURE it's gone! */
+		//PlaySong(0);				/* Kill music */
+		//FreeSong();					/* Purge it */
+		//PurgeAllSounds(Size);		/* Make SURE it's gone! */
 		break;
 	case 4:
 		return 0;
@@ -1133,5 +890,5 @@ static Word FreeStage(Word Stage,LongWord Size)
 
 void FreeSomeMem(void *MemPtr)
 {
-	DisposePtr(MemPtr);
+	SDL_free(MemPtr);
 }

@@ -1,4 +1,4 @@
-#include "wolfdef.h"
+#include "WolfDef.h"
 #include <ctype.h>
 #include <stdlib.h>
 
@@ -18,7 +18,7 @@ void Intro(void)
 
 	FadeToBlack();		/* Fade out the video */
 	PackPtr = LoadAResource(rMacPlayPic);
-	PackLength = PackPtr[0];
+	PackLength = SwapLongBE(PackPtr[0]);
 	ShapePtr = AllocSomeMem(PackLength);
 	DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLength);
 	DrawShape(0,0,ShapePtr);
@@ -35,7 +35,7 @@ void Intro(void)
 		ClearTheScreen(BLACK);
 		BlastScreen();
 		PackPtr = LoadAResource(rYummyPic);
-		PackLength = PackPtr[0];
+		PackLength = SwapLongBE(PackPtr[0]);
 		ShapePtr = AllocSomeMem(PackLength);
 		DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLength);
 		DrawShape((SCREENWIDTH-320)/2,(SCREENHEIGHT-200)/2,ShapePtr);

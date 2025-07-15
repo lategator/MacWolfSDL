@@ -1,4 +1,4 @@
-#include "wolfdef.h"
+#include "WolfDef.h"
 
 state_t states[NUMSTATES] = {
 {S_GUARD_WLK4, 0, T_STAND, A_NULL, ST_GRD_STND},

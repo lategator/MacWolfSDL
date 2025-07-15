@@ -1,5 +1,5 @@
 /* enmove.c*/
-#include "wolfdef.h"
+#include "WolfDef.h"
 
 dirtype opposite[9] =
 	{west,southwest,south,southeast,east,northeast,north,northwest,nodir};

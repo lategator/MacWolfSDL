@@ -1,4 +1,4 @@
-#include "wolfdef.h"
+#include "WolfDef.h"
 
 /**********************************
 
@@ -8,24 +8,28 @@
 		
 **********************************/
 
-static Boolean TryMove(Word Checkx,Word Checky)
+static Boolean TryMove(int Checkx,int Checky)
 {
 	actor_t *ActorPtr;	/* Pointer to actor record */
-	Word xl,yl,xh,yh;	/* Rect to scan */
+	int xl,yl,xh,yh;	/* Rect to scan */
 	Word tile;	/* Tile being tested */
-	Word x,y;	/* Working x,y */
+	int x,y;	/* Working x,y */
 
-	xl = (Checkx - PLAYERSIZE)>>FRACBITS;	/* Make the rect for the player in tiles */
-	xh = ((Checkx + PLAYERSIZE)>>FRACBITS)+1;
-	yl = (Checky - PLAYERSIZE)>>FRACBITS;
-	yh = ((Checky + PLAYERSIZE)>>FRACBITS)+1;
+	xl = ((int)Checkx - PLAYERSIZE)>>FRACBITS;	/* Make the rect for the player in tiles */
+	xh = (((int)Checkx + PLAYERSIZE)>>FRACBITS)+1;
+	yl = ((int)Checky - PLAYERSIZE)>>FRACBITS;
+	yh = (((int)Checky + PLAYERSIZE)>>FRACBITS)+1;
 	
 /* check for solid walls*/
 
 	y = yl;
 	do {
+		if (y < 0 || y >= MAPSIZE)
+			return FALSE;
 		x=xl;
 		do {
+			if (x < 0 || x >= MAPSIZE)
+				return FALSE;
 			tile = tilemap[y][x];	/* Test the tile */
 			if (tile & TI_GETABLE) {	/* Can I get this? */
 				GetBonus(x,y);		/* Get the item */
@@ -44,8 +48,12 @@ static Boolean TryMove(Word Checkx,Word Checky)
 	xh++;
 	y = yl;
 	do {
+		if (y < 0 || y >= MAPSIZE)
+			continue;
 		x = xl;
-		do {	
+		do {
+			if (x < 0 || x >= MAPSIZE)
+				continue;
 			tile = tilemap[y][x];	/* Get the tile */
 			if (tile&TI_ACTOR) {	/* Actor here? */
 				ActorPtr = &actors[MapPtr->tilemap[y][x]];
@@ -67,7 +75,7 @@ static Boolean TryMove(Word Checkx,Word Checky)
 		
 **********************************/
 
-static void ClipMove(int xmove,int ymove)
+static void ClipMove(short xmove,short ymove)
 {
 	int Checkx,Checky;
 
@@ -118,7 +126,7 @@ static void ClipMove(int xmove,int ymove)
 		
 **********************************/
 
-static void Thrust(Word angle,Word speed,Word *xmove, Word *ymove)
+static void Thrust(Word angle,Word speed,short *xmove, short *ymove)
 {	
 	angle &= ANGLES-1;		/* Mask the angle range */
 	if (speed >= TILEGLOBAL) {
@@ -143,7 +151,7 @@ void ControlMovement(void)
 {
 	Word turn,total;
 	Word tile;
-	Word xmove,ymove;
+	short xmove,ymove;
 	Word move;
 	
 	playermoving = FALSE;	/* No motion (Yet) */
