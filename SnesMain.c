@@ -1,5 +1,4 @@
 #include "WolfDef.h"
-#include <setjmp.h>
 #include <SDL3/SDL_main.h>
 
 /**********************************
@@ -12,31 +11,49 @@ void LoadMapSetData(void)
 {
 	LongWord Length;
 	int i;
+	maplist_t *Maps;
+	short *Sounds;
+	unsigned short *Songs;
+	unsigned short *Walls;
 
-	SoundListPtr = (short int *) LoadAResource(MySoundList);	/* Get the list of sounds */
-	Length = ResourceLength(MySoundList)>>1;
-	for (i = 0; i < Length; i++)
-		SoundListPtr[i] = SwapShortBE(SoundListPtr[i]);
-	RegisterSounds(SoundListPtr);
-	MapListPtr = (maplist_t *) LoadAResource(rMapList);	/* Get the map list */
-	MapListPtr->MaxMap = SwapUShortBE(MapListPtr->MaxMap);
-	MapListPtr->MapRezNum = SwapUShortBE(MapListPtr->MapRezNum);
-	for (int i = 0; i < MapListPtr->MaxMap; i++) {
-		MapInfo_t *Info = &MapListPtr->InfoArray[i];
-		Info->NextLevel = SwapUShortBE(Info->NextLevel);
-		Info->SecretLevel = SwapUShortBE(Info->SecretLevel);
-		Info->ParTime = SwapUShortBE(Info->ParTime);
-		Info->ScenarioNum = SwapUShortBE(Info->ScenarioNum);
-		Info->FloorNum = SwapUShortBE(Info->FloorNum);
+	Sounds = LoadAResource(MySoundList);	/* Get the list of sounds */
+	Maps = LoadAResource(rMapList);	/* Get the map list */
+	Songs = LoadAResource(rSongList);
+	Walls = LoadAResource(MyWallList);
+	if (Sounds != SoundListPtr) {
+		Length = ResourceLength(MySoundList)>>1;
+		for (i = 0; i < Length; i++)
+			Sounds[i] = SwapShortBE(Sounds[i]);
+		RegisterSounds(Sounds);
+		SoundListPtr = Sounds;
 	}
-	SongListPtr = (unsigned short *) LoadAResource(rSongList);
-	Length = ResourceLength(rSongList)>>1;
-	for (i = 0; i < Length; i++)
-		SongListPtr[i] = SwapUShortBE(SongListPtr[i]);
-	WallListPtr = (unsigned short *) LoadAResource(MyWallList);
-	Length = ResourceLength(MyWallList)>>1;
-	for (i = 0; i < Length; i++)
-		WallListPtr[i] = SwapUShortBE(WallListPtr[i]);
+	if (Maps != MapListPtr) {
+		if (Maps) {
+			Maps->MaxMap = SwapUShortBE(Maps->MaxMap);
+			Maps->MapRezNum = SwapUShortBE(Maps->MapRezNum);
+			for (int i = 0; i < Maps->MaxMap; i++) {
+				MapInfo_t *Info = &Maps->InfoArray[i];
+				Info->NextLevel = SwapUShortBE(Info->NextLevel);
+				Info->SecretLevel = SwapUShortBE(Info->SecretLevel);
+				Info->ParTime = SwapUShortBE(Info->ParTime);
+				Info->ScenarioNum = SwapUShortBE(Info->ScenarioNum);
+				Info->FloorNum = SwapUShortBE(Info->FloorNum);
+			}
+		}
+		MapListPtr = Maps;
+	}
+	if (Songs != SongListPtr) {
+		Length = ResourceLength(rSongList)>>1;
+		for (i = 0; i < Length; i++)
+			Songs[i] = SwapUShortBE(Songs[i]);
+		SongListPtr = Songs;
+	}
+	if (Walls != WallListPtr) {
+		Length = ResourceLength(MyWallList)>>1;
+		for (i = 0; i < Length; i++)
+			Walls[i] = SwapUShortBE(Walls[i]);
+		WallListPtr = Walls;
+	}
 }
 
 /**********************************
@@ -52,6 +69,7 @@ void SetupPlayScreen (void)
 	BlastScreen();
 	firstframe = 1;				/* fade in after drawing first frame */
 	GameViewSize = NewGameWindow(GameViewSize);
+	GrabMouse();
 }
 
 /**********************************
@@ -60,12 +78,13 @@ void SetupPlayScreen (void)
 
 **********************************/
 
-void RunAutoMap(void)
+exit_t RunAutoMap(void)
 {
 	Word vx,vy;
 	Word Width,Height;
 	Word CenterX,CenterY;
 	Word oldjoy,newjoy;
+	exit_t PS;
 
 	MakeSmallFont();				/* Make the tiny font */
 	playstate = EX_AUTOMAP;
@@ -86,13 +105,18 @@ void RunAutoMap(void)
 		vy = 0;
 	}
 	oldjoy = joystick1;
-	do {
+	for (;;) {
 		WaitTick();
 		ClearTheScreen(0x2f);
 		DrawAutomap(vx,vy);
-		do {
-			ReadSystemJoystick();
-		} while (joystick1==oldjoy);
+		for (;;) {
+			PS = ReadSystemJoystick();
+			if (PS || playstate != EX_AUTOMAP)
+				goto Done;
+			if (joystick1 != oldjoy || PauseExited)
+				break;
+			WaitTick();
+		}
 		oldjoy &= joystick1;
 		newjoy = joystick1 ^ oldjoy;
 		if (newjoy & (JOYPAD_START|JOYPAD_SELECT|JOYPAD_A|JOYPAD_B|JOYPAD_X|JOYPAD_Y)) {
@@ -110,16 +134,19 @@ void RunAutoMap(void)
 		if (newjoy & JOYPAD_DN && vy <(MAPSIZE-1)) {
 			++vy;
 		}
-	} while (playstate==EX_AUTOMAP);
+	}
 
+Done:
 	playstate = EX_STILLPLAYING;
 /* let the player scroll around until the start button is pressed again */
 	KillSmallFont();			/* Release the tiny font */
 	RedrawStatusBar();
-	ReadSystemJoystick();
+	if (!PS)
+		PS = ReadSystemJoystick();
 	mousex = 0;
 	mousey = 0;
 	mouseturn = 0;
+	return PS;
 }
 
 /**********************************
@@ -135,6 +162,7 @@ void StartGame(void)
 	}
 	SetupPlayScreen();
 	GameLoop();			/* Play the game */
+	UngrabMouse();
 	StopSong();			/* Make SURE music is off */
 }
 
@@ -144,11 +172,14 @@ void StartGame(void)
 
 **********************************/
 
-Boolean TitleScreen (void)
+void TitleScreen (void)
 {
 	LongWord PackLen;
 	LongWord *PackPtr;
 	Byte *ShapePtr;
+	exit_t PSTmp;
+	exit_t PS = EX_COMPLETED;
+	int Key;
 
 	playstate = EX_LIMBO;	/* Game is not in progress */
 	NewGameWindow(1);	/* Set to 512 mode */
@@ -159,14 +190,26 @@ Boolean TitleScreen (void)
 	DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLen);
 	DrawShape(0,0,ShapePtr);
 	ReleaseAResource(rTitlePic);
-	FreeSomeMem(ShapePtr);
 	BlastScreen();
 	StartSong(SongListPtr[0]);
 	FadeTo(rTitlePal);	/* Fade in the picture */
 	BlastScreen();
-	WaitTicksEvent(0);		/* Wait for event */
-	playstate = EX_COMPLETED;
-	return TRUE;				/* Return True if canceled */
+	for (;;) {
+		Key = WaitTicksEvent(0);		/* Wait for event */
+		if (Key != '\e' && Key != -3)
+			break;
+		PSTmp = PauseMenu(FALSE);
+		if (PSTmp > 0) {
+			if (PSTmp == EX_RESTART)
+				PSTmp = EX_LIMBO;
+			PS = PSTmp;
+			break;
+		}
+		DrawShape(0,0,ShapePtr);
+		BlastScreen();
+	}
+	FreeSomeMem(ShapePtr);
+	playstate = PS;
 }
 
 /**********************************
@@ -175,34 +218,35 @@ Boolean TitleScreen (void)
 
 **********************************/
 
-jmp_buf ResetJmp;
-Boolean JumpOK;
 extern Word NumberIndex;
 
 int main()
 {
 	InitTools();		/* Init the system environment */
 	WaitTick();			/* Wait for a system tick to go by */
-	playstate = (exit_t)setjmp(ResetJmp);
+	playstate = EX_LIMBO;
+	UngrabMouse();
 	NumberIndex = 36;	/* Force the score to redraw properly */
 	IntermissionHack = FALSE;
-	if (playstate) {
-		goto DoGame;	/* Begin a new game or saved game */
-	}
-	JumpOK = TRUE;		/* Jump vector is VALID */
 	Intro();			/* Do the game intro */
 	for (;;) {
-		if (TitleScreen()) {		/* Show the game logo */
+		if (!playstate) {
+			do {
+				TitleScreen();		/* Show the game logo */
+			} while (!playstate);
 			StartSong(SongListPtr[0]);
 			ClearTheScreen(BLACK);	/* Blank out the title page */
 			BlastScreen();
 			SetAPalette(rBlackPal);
-			if (ChooseGameDiff()) {	/* Choose your difficulty */
-				playstate = EX_NEWGAME;	/* Start a new game */
-DoGame:
+		}
+		if (playstate == EX_NEWGAME || ChooseGameDiff()) {	/* Choose your difficulty */
+			playstate = EX_NEWGAME;	/* Start a new game */
+			do {
 				FadeToBlack();		/* Fade the screen */
 				StartGame();		/* Play the game */
-			}
+			} while (playstate == EX_LOADGAME || playstate == EX_NEWGAME);
+		} else {
+			playstate = EX_LIMBO;
 		}
 	}
 }

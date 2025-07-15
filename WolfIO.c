@@ -42,15 +42,21 @@ void SetNumber(LongWord number,Word x,Word y,Word digits)
 
 **********************************/
 
-void IO_CheckInput(void)
+exit_t IO_CheckInput(void)
 {
-	ReadSystemJoystick();	/* Set the variable "joystick1" */
+	exit_t PS;
 
-/* check for auto map */
+	PS = ReadSystemJoystick();	/* Set the variable "joystick1" */
+	if (PS)
+		return PS;
 
-    if (joystick1 & JOYPAD_START) {
-         RunAutoMap();		/* Do the auto map */
-    }
+	/* check for auto map */
+
+	if (joystick1 & JOYPAD_START) {
+		PS = RunAutoMap();		/* Do the auto map */
+		if (PS)
+			return PS;
+	}
 
 /*
 ** get game control flags from joypad
@@ -77,6 +83,7 @@ void IO_CheckInput(void)
     if (joystick1 & JOYPAD_SELECT) {
          buttonstate[bt_select] = 1;
 	}
+	return 0;
 }
 
 /**********************************

@@ -198,7 +198,8 @@ typedef	enum {		/* State of the game */
 	EX_DIED,
 	EX_NEWGAME,
 	EX_LOADGAME,
-	EX_AUTOMAP
+	EX_AUTOMAP,
+	EX_RESTART
 } exit_t;
 
 typedef enum {		/* actor class info*/
@@ -535,27 +536,31 @@ extern Byte textures[MAPSIZE*2+5][MAPSIZE]; /* 0-63 is horizontal, 64-127 is ver
 
 /* In SDLWolf.c (formerly Mac.c, 3DO.c, AppleIIgs.c) */
 
-struct Rect {
-  short               top;
-  short               left;
-  short               bottom;
-  short               right;
-};
-typedef struct Rect                     Rect;
-
 extern void InitTools(void);
+extern void BlitScreen(void);
 extern void BlastScreen(void);
 extern void BlastScreen2(Rect *BlastRect);
 extern void BailOut(void);
 extern void GoodBye(void);
-extern void ReadSystemJoystick(void);
+extern exit_t ReadSystemJoystick(void);
+extern int ReadMenuJoystick(void);
+extern void GrabMouse(void);
+extern void UngrabMouse(void);
+extern void ResizeGameWindow(Word Width, Word Height);
 extern Word NewGameWindow(Word NewVidSize);
 extern void ShowGetPsyched(void);
 extern void DrawPsyched(Word Index);
 extern void EndGetPsyched(void);
 extern Word ChooseGameDiff(void);
+extern exit_t PauseMenu(Boolean Shape);
 extern void ShareWareEnd(void);
+extern Boolean ChooseLoadGame(void);
+extern Boolean ChooseSaveGame(void);
+extern Boolean LoadGame(void);
+extern void SaveGame(void);
 extern void FinishLoadGame(void);
+extern void LoadPrefs(void);
+extern void SavePrefs(void);
 extern void BeginSound(Word SoundNum);
 extern void EndSound(Word SoundNum);
 extern void EndAllSound(void);
@@ -688,7 +693,7 @@ extern void MovePWalls(void);
 /* In WolfIO.c */
 
 extern void SetNumber(LongWord number,Word x,Word y,Word digits);
-extern void IO_CheckInput(void);
+extern exit_t IO_CheckInput(void);
 extern void IO_DrawFloor(Word floor);
 extern void IO_DrawScore(LongWord score);
 extern void IO_DrawLives(Word lives);
@@ -794,9 +799,9 @@ extern void RenderBSPNode(Word bspnum);
 
 extern void LoadMapSetData(void);
 extern void SetupPlayScreen(void);
-extern void RunAutoMap(void);
+extern exit_t RunAutoMap(void);
 extern void StartGame(void);
-extern Boolean TitleScreen(void);
+extern void TitleScreen(void);
 extern void WolfMain(void);
 
 /* In Intermis.c */
@@ -804,7 +809,7 @@ extern void WolfMain(void);
 extern void LevelCompleted(void);
 extern void Intermission(void);
 extern void VictoryIntermission(void);
-extern void CharacterCast(void);
+extern exit_t CharacterCast(void);
 
 /* In Data.c */
 
@@ -837,6 +842,7 @@ extern Word joystick1;					/* Joystick value */
 extern int mousex;						/* Mouse x movement */
 extern int mousey;						/* Mouse y movement */
 extern int mouseturn;					/* Mouse turn factor */
+extern int mousewheel;				/* Mouse wheel */
 extern Word nextmap;					/* Next map to warp to */
 extern Word facecount;					/* Time to show a specific head */
 extern Word faceframe;					/* Head pic to show */
@@ -870,7 +876,9 @@ extern Word MacVidSize;		/* Current 0 = 320, 1 = 512, 2 = 640 */
 extern Word SlowDown;		/* If true, then limit game to 30hz */
 extern Word MouseEnabled;	/* Allow mouse control */
 extern Word GameViewSize;	/* Size of the game screen */
+extern LongWord ScenarioIndex;	/* Currently playing scenario */
 extern Boolean IntermissionHack;	/* Hack for preventing double score drawing during intermission */
+extern Boolean PauseExited;	/* Flag for rerendering when exiting pause */
 extern Word NoWeaponDraw;		/* Flag to not draw the weapon on the screen */
 extern maplist_t *MapListPtr;		/* Pointer to map info record */
 extern short *SoundListPtr;	/* Pointer to sound list record */

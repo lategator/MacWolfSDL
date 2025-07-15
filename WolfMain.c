@@ -331,6 +331,7 @@ Again:
 
 void PlayLoop(void)
 {
+	exit_t PS;
 	LongWord Timer;
 	LastTicCount = ReadTick();
 	do {
@@ -346,7 +347,11 @@ void PlayLoop(void)
 		if (TicCount>=5) {
 			TicCount = 4;
 		}
-		IO_CheckInput();	/* Read the controls from the system */
+		PS = IO_CheckInput();	/* Read the controls from the system */
+		if (PS) {
+			playstate = PS;
+			break;
+		}
 		madenoise = FALSE;	/* No noise made (Yet) */
 		MoveDoors();		/* Open and close all doors */
 		MovePWalls();		/* Move all push walls */
@@ -426,10 +431,13 @@ skipbrief:
 		PrepPlayLoop();		/* Init internal variables */
 		EndGetPsyched();
 		PlayLoop();			/* Play the game */
+		if (playstate == EX_LOADGAME || playstate == EX_NEWGAME)
+			break;
 		if (playstate == EX_DIED) {		/* Did you die? */
 			--gamestate.lives;			/* Remove a life */
 			Died();						/* Run the death code */
 			if (!gamestate.lives) {		/* No more lives? */
+				playstate = EX_LIMBO;
 				return;					/* Exit then */
 			}
 			goto skipbrief;				/* Try again */
@@ -446,6 +454,7 @@ skipbrief:
 			Intermission();				/* Display the wrapup... */
 			ShareWareEnd();			/* End the game for the shareware version */
 /*			VictoryIntermission();	*/	/* Wrapup for victory! */
+			playstate = EX_LIMBO;
 			return;
 		}
 		ReleaseMap();				/* Unload the game map */

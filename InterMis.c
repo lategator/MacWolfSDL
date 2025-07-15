@@ -223,6 +223,7 @@ void LevelCompleted (void)
 
 	IntermissionHack = TRUE;	/* Hack to keep score from drawing twice */
 	NumberIndex = 47;		/* Hack to draw score using an alternate number set */
+	UngrabMouse();
 	NewGameWindow(1);		/* Force 512 mode screen */
 	PackPtr = LoadAResource(rIntermission);
 	PackLength = SwapLongBE(PackPtr[0]);
@@ -365,10 +366,11 @@ char *casttext[NUMCAST] = { /* 28 chars max */
 };
 #endif
 
-void CharacterCast(void)
+exit_t CharacterCast(void)
 {
 	Word Enemy,count, cycle;
 	Word up;
+	exit_t PS = 0;
 	state_t *StatePtr;
 
 /* reload level and set things up */
@@ -403,7 +405,9 @@ void CharacterCast(void)
 			topspritenum = StatePtr->shapenum;	/* Set the formost shape # */
 			RenderView();		/* Show the 3d view */
 			WaitTicks(1);		/* Limit to 15 frames a second */
-			ReadSystemJoystick();	/* Read the joystick */
+			PS = ReadSystemJoystick();	/* Read the joystick */
+			if (PS)
+				return PS;
 			if (!joystick1 && !up) {
 				up = TRUE;
 				continue;
@@ -430,4 +434,5 @@ void CharacterCast(void)
 	} while (Enemy < NUMCAST);	/* Still able to show */
 	StopSong();		/* Stop the music */
 	FadeToBlack();	/* Fade out */
+	return PS;
 }

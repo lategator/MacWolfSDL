@@ -1,14 +1,18 @@
+#include "SDLWolf.h"
 #include "Burger.h"
 #include "WolfDef.h"
-#include <SDL3/SDL.h>
+#include "ini.h"
 #include <stdlib.h>
-#include <stdio.h>
 #include <err.h>
 
-#define NAUDIOCHANS 8
+static const char *PrefOrg = NULL;
+static const char *PrefApp = "macwolfsdl";
+static const char *PrefsFile = "macwolfsdl.ini";
 
-Word MacWidth;					/* Width of play screen (Same as GameRect.right) */
-Word MacHeight;					/* Height of play screen (Same as GameRect.bottom) */
+#define NAUDIOCHANS 5
+
+Word MacWidth = 0;				/* Width of play screen (Same as GameRect.right) */
+Word MacHeight = 0;				/* Height of play screen (Same as GameRect.bottom) */
 Word MacViewHeight;				/* Height of 3d screen (Bottom of 3D view */
 static const Word MonitorWidth=640;		/* Width of the monitor in pixels */
 static const Word MonitorHeight=480;		/* Height of the monitor in pixels */
@@ -17,49 +21,66 @@ static const Word VidYs[] = {200,384,400,480};
 static const Word VidVs[] = {160,320,320,400};
 static const Word VidPics[] = {rFaceShapes,rFace512,rFace640,rFace640};		/* Resource #'s for art */
 static SDL_Window *SdlWindow = NULL;
-static SDL_Renderer *SdlRenderer = NULL;
+SDL_Renderer *SdlRenderer = NULL;
 static SDL_Texture *SdlTexture = NULL;
 static SDL_Surface *SdlSurface = NULL;
+static SDL_Texture *UITexture = NULL;
+static SDL_Surface *UIOverlay = NULL;
 static SDL_Palette *SdlPalette = NULL;
 static SDL_AudioDeviceID SdlAudioDevice = 0;
 static SDL_AudioStream *SdlSfxChannels[NAUDIOCHANS] = { NULL };
 static Word SdlSfxNums[NAUDIOCHANS];
-static char *SaveFileName = NULL;
 static Byte *GameShapeBuffer = NULL;
+static char *MyPrefPath = NULL;
+extern int SelectedMenu;
+char *SaveFileName = NULL;
 
 Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt);
-
-static Word DoMyAlert(Word AlertNum)
-{
-	return 0;
-}
 
 void InitTools(void)
 {
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO))
 		errx(1, "SDL_Init");
+	SDL_SetAppMetadata("Wolfenstein 3D", "1.0", "wolf3dsnes");
+	LoadPrefs();
 	ChangeAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
 	InitResources();
-	if (!LoadLevelResources())
-		err(1, "LoadLevelResources");
 	GetTableMemory();
 	LoadMapSetData();
-	if (MapListPtr->MaxMap==3) {	/* Shareware version? */
-		DoMyAlert(ShareWareWin);	/* Show the shareware message */
-	}
-	NewGameWindow(3);				/* Create a game window at 512x384 */
+	NewGameWindow(2);				/* Create a game window at 512x384 */
 	ClearTheScreen(BLACK);			/* Force the offscreen memory blank */
 	BlastScreen();
 }
 
+const char *PrefPath(void)
+{
+	if (MyPrefPath)
+		return MyPrefPath;
+	MyPrefPath = SDL_GetPrefPath(PrefOrg, PrefApp);
+	if (!MyPrefPath) errx(1, "SDL_GetPrefPath: %s", SDL_GetError());
+	return MyPrefPath;
+}
+
+SDL_Storage *PrefStorage(void)
+{
+    SDL_Storage *Storage;
+
+	Storage = SDL_OpenUserStorage(PrefOrg, PrefApp, 0);
+	if (!Storage)
+		return NULL;
+    while (!SDL_StorageReady(Storage)) {
+        SDL_Delay(1);
+    }
+	return Storage;
+}
+
 Byte CurrentPal[768];
 
-void SetAPalettePtr(unsigned char *PalPtr)
+void SetPalette(SDL_Palette *Palette, unsigned char *PalPtr)
 {
 	Word i;					/* Temp */
-
-	memcpy(CurrentPal,PalPtr,768);
 	SDL_Color Colors[256];
+
 	Colors[0] = (SDL_Color) { 255, 255, 255, 255 };
 	i = 1;			/* Skip color #0 */
 	PalPtr+=3;
@@ -72,23 +93,33 @@ void SetAPalettePtr(unsigned char *PalPtr)
 			Colors[i].b = 0x01;
 		}
 		PalPtr+=3;
-	} while (++i<255);	/* All done? */
-	SDL_SetPaletteColors(SdlPalette, Colors, 0, 256);
+	} while (++i<256);	/* All done? */
+	SDL_SetPaletteColors(Palette, Colors, 0, 256);
+}
+
+void SetAPalettePtr(unsigned char *PalPtr)
+{
+	memcpy(CurrentPal,PalPtr,768);
+	SetPalette(SdlPalette, PalPtr);
 }
 
 void GoodBye(void)
 {
-	if (SdlSurface) {
-		if (SDL_MUSTLOCK(SdlSurface))
-			SDL_UnlockSurface(SdlSurface);
+	if (SdlSurface)
 		SDL_DestroySurface(SdlSurface);
-	}
+	if (UIOverlay)
+		SDL_DestroySurface(UIOverlay);
+	if (UITexture)
+		SDL_DestroyTexture(UITexture);
 	if (SdlTexture)
 		SDL_DestroyTexture(SdlTexture);
 	if (SdlRenderer)
 		SDL_DestroyRenderer(SdlRenderer);
 	if (SdlWindow)
 		SDL_DestroyWindow(SdlWindow);
+	if (MyPrefPath)
+		SDL_free(MyPrefPath);
+	KillResources();
 
 	SDL_Quit();
 	if (SaveFileName)
@@ -98,28 +129,56 @@ void GoodBye(void)
 
 void BailOut(void)
 {
-	DoMyAlert(rUserAlert);		/* Show the alert window */
 	GoodBye();				/* Bail out! */
 }
 
-static void BlitScreen(void)
+static void BlitSurfaceTex(SDL_Surface *Surface, SDL_Texture *Texture, const SDL_Rect *rect, Boolean Clear)
 {
 	SDL_Surface *Screen;
-	SDL_LockTextureToSurface(SdlTexture, NULL, &Screen);
-	if (SDL_MUSTLOCK(SdlSurface))
-		SDL_UnlockSurface(SdlSurface);
-	SDL_BlitSurface(SdlSurface, NULL, Screen, NULL);
-	if (SDL_MUSTLOCK(SdlSurface))
-		SDL_LockSurface(SdlSurface);
-	SDL_UnlockTexture(SdlTexture);
+	Boolean Lock = (Surface->flags & SDL_SURFACE_LOCKED) != 0;
+	SDL_LockTextureToSurface(Texture, NULL, &Screen);
+	if (Lock)
+		SDL_UnlockSurface(Surface);
+	if (Clear)
+		SDL_ClearSurface(Screen, 0, 0, 0, 0);
+	SDL_BlitSurface(Surface, NULL, Screen, rect);
+	if (Lock)
+		SDL_LockSurface(Surface);
+	SDL_UnlockTexture(Texture);
+}
+
+void BlitSurface(SDL_Surface *Surface, const SDL_Rect *rect)
+{
+	BlitSurfaceTex(Surface, SdlTexture, rect, FALSE);
+}
+
+void BlitScreen(void)
+{
+	BlitSurface(SdlSurface, NULL);
+}
+
+void StartUIOverlay(void)
+{
 	SDL_RenderTexture(SdlRenderer, SdlTexture, NULL, NULL);
+	VideoPointer = UIOverlay->pixels;
+	ClearTheScreen(WHITE);
+}
+
+void EndUIOverlay(void)
+{
+	VideoPointer = SdlSurface->pixels;
+	BlitSurfaceTex(UIOverlay, UITexture, NULL, TRUE);
+	SDL_RenderTexture(SdlRenderer, UITexture, NULL, NULL);
+	SDL_RenderPresent(SdlRenderer);
 }
 
 void BlastScreen(void)
 {
 	BlitScreen();
+	SDL_RenderTexture(SdlRenderer, SdlTexture, NULL, NULL);
 	SDL_RenderPresent(SdlRenderer);
 }
+
 void BlastScreen2(Rect *BlastRect)
 {
   BlastScreen();
@@ -131,47 +190,36 @@ void BlastScreen2(Rect *BlastRect)
 
 **********************************/
 
+SDL_Keycode KeyBinds[12] = {
+	SDL_SCANCODE_X,
+	SDL_SCANCODE_Z,
+	SDL_SCANCODE_LALT,
+	SDL_SCANCODE_SPACE,
+	SDL_SCANCODE_RIGHT,
+	SDL_SCANCODE_LEFT,
+	SDL_SCANCODE_DOWN,
+	SDL_SCANCODE_UP,
+	SDL_SCANCODE_SLASH,
+	SDL_SCANCODE_TAB,
+	SDL_SCANCODE_LSHIFT,
+	SDL_SCANCODE_LCTRL,
+};
+
 typedef struct {
 	SDL_Scancode Code;
 	Word JoyValue;
 } Keys2Joy;
 
-static const Keys2Joy KeyMatrix[] = {
-	{SDL_SCANCODE_KP_7,JOYPAD_LFT|JOYPAD_UP},		/* Keypad 7 */
-	{SDL_SCANCODE_KP_4,JOYPAD_LFT},				/* Keypad 4 */
-	{SDL_SCANCODE_KP_1,JOYPAD_LFT|JOYPAD_DN},		/* Keypad 1 */
-	{SDL_SCANCODE_KP_8,JOYPAD_UP},				/* Keypad 8 */
-	{SDL_SCANCODE_KP_5,JOYPAD_DN},				/* Keypad 5 */
-	{SDL_SCANCODE_KP_2,JOYPAD_DN},				/* Keypad 2 */
-	{SDL_SCANCODE_KP_9,JOYPAD_RGT|JOYPAD_UP},		/* Keypad 9 */
-	{SDL_SCANCODE_KP_6,JOYPAD_RGT},				/* Keypad 6 */
-	{SDL_SCANCODE_KP_3,JOYPAD_RGT|JOYPAD_DN},		/* Keypad 3 */
+static const Keys2Joy MenuKeyMatrix[] = {
 	{SDL_SCANCODE_UP,JOYPAD_UP},				/* Arrow up */
 	{SDL_SCANCODE_DOWN,JOYPAD_DN},				/* Arrow down */
 	{SDL_SCANCODE_LEFT,JOYPAD_LFT},				/* Arrow Left */
 	{SDL_SCANCODE_RIGHT,JOYPAD_RGT},				/* Arrow Right */
-	{ SDL_SCANCODE_W,JOYPAD_UP},			/* W */
-	{ SDL_SCANCODE_A,JOYPAD_LFT},			/* A */
-	{ SDL_SCANCODE_S,JOYPAD_DN},			/* S */
-	{ SDL_SCANCODE_D,JOYPAD_RGT},			/* D */
-	{ SDL_SCANCODE_I,JOYPAD_UP},			/* I */
-	{ SDL_SCANCODE_J,JOYPAD_LFT},			/* J */
-	{ SDL_SCANCODE_K,JOYPAD_DN},			/* K */
-	{ SDL_SCANCODE_L,JOYPAD_RGT},			/* L */
 	{ SDL_SCANCODE_SPACE,JOYPAD_A},				/* Space */
 	{ SDL_SCANCODE_RETURN,JOYPAD_A},				/* Return */
-	{SDL_SCANCODE_KP_0,JOYPAD_A},				/* Keypad 0 */
 	{ SDL_SCANCODE_KP_ENTER,JOYPAD_A},				/* keypad enter */
-	{ SDL_SCANCODE_RALT,JOYPAD_TR},			/* Option */
-	{ SDL_SCANCODE_LALT,JOYPAD_TR},			/* Option */
-	{ SDL_SCANCODE_RSHIFT,JOYPAD_X},				/* Shift L */
-	{ SDL_SCANCODE_CAPSLOCK,JOYPAD_X},				/* Caps Lock */
-	{ SDL_SCANCODE_LSHIFT,JOYPAD_X},				/* Shift R */
-	{ SDL_SCANCODE_TAB,JOYPAD_SELECT},		/* Tab */
-	{ SDL_SCANCODE_LCTRL,JOYPAD_B},				/* Ctrl */
-	{ SDL_SCANCODE_RCTRL,JOYPAD_B}				/* Ctrl */
+	{ SDL_SCANCODE_ESCAPE,JOYPAD_B},				/* keypad enter */
 };
-
 static const char *CheatPtr[] = {		/* Cheat strings */
 	"XUSCNIELPPA",
 	"IDDQD",
@@ -185,27 +233,30 @@ static const char *CheatPtr[] = {		/* Cheat strings */
 static Word Cheat;			/* Which cheat is active */
 static Word CheatIndex;	/* Index to the cheat string */
 
-void ReadSystemJoystick(void)
+exit_t ReadSystemJoystick(void)
 {
 	Word i;
 	Word Index;
 	SDL_Event event;
 	SDL_MouseButtonFlags Buttons;
 	const bool *Keys;
-	const Keys2Joy *KeyPtr = KeyMatrix;
+	const SDL_Keycode *KeyPtr = KeyBinds;
 
 	joystick1 = 0;			/* Assume that joystick not moved */
+	mousewheel = 0;
 
 	/* Switch weapons like in DOOM! */
-  SDL_PumpEvents();
+	PauseExited = FALSE;
+	SDL_PumpEvents();
 	while (SDL_PollEvent(&event)) {
 		if (event.type == SDL_EVENT_QUIT) {
 			GoodBye();
-		} else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
-			//PauseSoundMusicSystem();	/* Pause the music */
-			WaitTicksEvent(0);
-			LastTicCount = ReadTick();	/* Reset the timer for the pause key */
-		} else if (event.type == SDL_EVENT_KEY_DOWN) {
+		} else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+			mousewheel += event.wheel.y;
+		} else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_ESCAPE) {
+			PauseExited = TRUE;
+			return PauseMenu(TRUE);
+		} else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
 			i = SDL_toupper(event.key.key);	/* Force UPPER case */
 			if (CheatIndex) {		/* Cheat in progress */
 				if (CheatPtr[Cheat][CheatIndex]==i) {		/* Match the current string? */
@@ -293,10 +344,9 @@ void ReadSystemJoystick(void)
 						gamestate.pendingweapon = WP_MISSILE;
 					}
 					break;
-				case SDLK_PERIOD:		/* Keypad Period */
-				case SDLK_SLASH:		/* Slash */
-					joystick1 = JOYPAD_START;
 			}
+			if (event.key.scancode == KeyBinds[8])
+				joystick1 = JOYPAD_START;
 		} else if (event.type == SDL_EVENT_MOUSE_MOTION && MouseEnabled) {
 			if (joystick1&JOYPAD_TR) {	/* Strafing? */
 				mousex += event.motion.xrel;	/* Move horizontally for strafe */
@@ -306,13 +356,15 @@ void ReadSystemJoystick(void)
 			mousey += event.motion.yrel;		/* Forward motion */
 		}
 	}
+	if (joystick1 & JOYPAD_START)
+		return 0;
 	Keys = SDL_GetKeyboardState(NULL);
 	i = 0;					/* Init the count */
 	do {
-		if (Keys[KeyPtr->Code])
-			joystick1 |= KeyPtr->JoyValue;	/* Set the joystick value */
+		if (i != 8 && Keys[*KeyPtr])
+			joystick1 |= 1<<(i+4);	/* Set the joystick value */
 		KeyPtr++;					/* Next index */
-	} while (++i<33);				/* All done? */
+	} while (++i<sizeof KeyBinds/sizeof *KeyBinds);				/* All done? */
 	if (MouseEnabled) {
 		Buttons = SDL_GetMouseState(NULL, NULL);
 		if (Buttons & SDL_BUTTON_LMASK)
@@ -321,15 +373,114 @@ void ReadSystemJoystick(void)
 			joystick1 |= JOYPAD_A;
 	}
 
-	if (joystick1 & JOYPAD_TR) {		/* Handle the side scroll (Special case) */
+	if (joystick1 & JOYPAD_X) {		/* Handle the side scroll (Special case) */
 		if (joystick1&JOYPAD_LFT) {
-			joystick1 = (joystick1 & ~(JOYPAD_TR|JOYPAD_LFT)) | JOYPAD_TL;
+			joystick1 = (joystick1 & ~JOYPAD_LFT) | JOYPAD_TL;
 		} else if (joystick1&JOYPAD_RGT) {
-			joystick1 = joystick1 & ~JOYPAD_RGT;
-		} else {
-			joystick1 &= ~JOYPAD_TR;
+			joystick1 = (joystick1 & ~JOYPAD_RGT) | JOYPAD_TR;
+		}
+		joystick1 &= ~JOYPAD_X;
+	}
+	return 0;
+}
+
+int ReadMenuJoystick(void)
+{
+	Word i;
+	SDL_Event event;
+	const Keys2Joy *KeyPtr;
+
+	joystick1 = 0;
+	mousewheel = 0;
+
+	SDL_PumpEvents();
+	while (SDL_PollEvent(&event)) {
+		if (event.type == SDL_EVENT_QUIT) {
+			GoodBye();
+		} else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+			mousewheel += event.wheel.y;
+		} else if (event.type == SDL_EVENT_MOUSE_MOTION) {
+			mousex = event.motion.x;
+			mousey = event.motion.y;
+		} else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+			mousex = event.motion.x;
+			mousey = event.motion.y;
+			return event.button.button;
+		} else if (event.type == SDL_EVENT_KEY_DOWN) {
+			KeyPtr = MenuKeyMatrix;
+			for (i = 0; i < sizeof MenuKeyMatrix/sizeof *MenuKeyMatrix; i++) {
+				if (KeyPtr->Code == event.key.scancode) {
+					if (!event.key.repeat || (KeyPtr->JoyValue != JOYPAD_A && KeyPtr->JoyValue != JOYPAD_B))
+						joystick1 |= KeyPtr->JoyValue;
+					break;
+				}
+				KeyPtr++;					/* Next index */
+			}
 		}
 	}
+	return 0;
+}
+
+void ResizeGameWindow(Word Width, Word Height)
+{
+	SDL_Palette *Palette;
+
+	if (Width == MacWidth && Height == MacHeight)
+		return;
+	if ((Width != MacWidth || Height != MacHeight) && MathSize != (Word)-1)
+		MathSize = -2;
+	MacWidth = Width;
+	MacHeight = Height;
+	MacViewHeight = Height;
+	MacVidSize = -1;
+	if (!SdlWindow) {
+		SdlWindow = SDL_CreateWindow("Wolfenstein 3D", MacWidth, MacHeight, 0);
+		if (!SdlWindow)
+			errx(1, "SDL_CreateWindow");
+		SdlRenderer = SDL_CreateRenderer(SdlWindow, NULL);
+		if (!SdlRenderer)
+			errx(1, "SDL_CreateRenderer");
+	} else {
+		if (SdlSurface)
+			SDL_DestroySurface(SdlSurface);
+		if (UIOverlay)
+			SDL_DestroySurface(UIOverlay);
+		if (SdlTexture)
+			SDL_DestroyTexture(SdlTexture);
+		if (UITexture)
+			SDL_DestroyTexture(UITexture);
+		SDL_SetWindowSize(SdlWindow, MacWidth, MacHeight);
+	}
+	SdlSurface = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
+	if (!SdlSurface)
+		errx(1, "SDL_CreateSurface");
+	SdlPalette = SDL_CreateSurfacePalette(SdlSurface);
+	if (!SdlPalette)
+		errx(1, "SDL_CreateSurfacePalette");
+	UIOverlay = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
+	if (!UIOverlay)
+		errx(1, "SDL_CreateSurface");
+	Palette = SDL_CreateSurfacePalette(UIOverlay);
+	if (!Palette)
+		errx(1, "SDL_CreateSurfacePalette");
+	SetPalette(Palette, LoadAResource(rGamePal));
+	ReleaseAResource(rGamePal);
+	SDL_SetSurfaceBlendMode(UIOverlay, SDL_BLENDMODE_NONE);
+	SDL_SetSurfaceColorKey(UIOverlay, TRUE, 0);
+	SdlTexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
+	if (!SdlTexture)
+		errx(1, "SDL_CreateTexture");
+	UITexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
+	if (!UITexture)
+		errx(1, "SDL_CreateTexture");
+
+	if (SDL_MUSTLOCK(SdlSurface))
+		SDL_LockSurface(SdlSurface);
+	if (SDL_MUSTLOCK(UIOverlay))
+		SDL_LockSurface(UIOverlay);
+	VideoPointer = SdlSurface->pixels;
+	VideoWidth = SdlSurface->pitch;
+	InitYTable();				/* Init the game's YTable */
 }
 
 Word NewGameWindow(Word NewVidSize)
@@ -353,6 +504,7 @@ Word NewGameWindow(Word NewVidSize)
 	if (NewVidSize==MacVidSize) {	/* Same size being displayed? */
 		return MacVidSize;				/* Exit then... */
 	}
+	SelectedMenu = -1;
 TryAgain:
 	if (GameShapeBuffer) {
 		FreeSomeMem(GameShapeBuffer);	/* All the permanent game shapes */
@@ -360,43 +512,11 @@ TryAgain:
 		for (i = 0; i < 57; i++)
 			GameShapes[i] = NULL;
 	}
+
+	ResizeGameWindow(VidXs[NewVidSize], VidYs[NewVidSize]);
 	MacVidSize = NewVidSize;	/* Set the new data size */
-	MacWidth = VidXs[NewVidSize];
-	MacHeight = VidYs[NewVidSize];
 	MacViewHeight = VidVs[NewVidSize];
 
-	if (!SdlWindow) {
-		SdlWindow = SDL_CreateWindow("Wolfenstein 3D", MacWidth, MacHeight, 0);
-		if (!SdlWindow)
-			errx(1, "SDL_CreateWindow");
-		SdlRenderer = SDL_CreateRenderer(SdlWindow, NULL);
-		if (!SdlRenderer)
-			errx(1, "SDL_CreateRenderer");
-	} else {
-		if (SdlSurface) {
-			if (SDL_MUSTLOCK(SdlSurface))
-				SDL_UnlockSurface(SdlSurface);
-			SDL_DestroySurface(SdlSurface);
-		}
-		if (SdlTexture)
-			SDL_DestroyTexture(SdlTexture);
-		SDL_SetWindowSize(SdlWindow, MacWidth, MacHeight);
-	}
-	SdlSurface = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
-	if (!SdlSurface)
-		errx(1, "SDL_CreateSurface");
-	SdlPalette = SDL_CreateSurfacePalette(SdlSurface);
-	if (!SdlPalette)
-		errx(1, "SDL_CreateSurfacePalette");
-	SdlTexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
-	if (!SdlTexture)
-		errx(1, "SDL_CreateTexture");
-
-	if (SDL_MUSTLOCK(SdlSurface))
-		SDL_LockSurface(SdlSurface);
-	VideoPointer = SdlSurface->pixels;
-	VideoWidth = SdlSurface->pitch;
-	InitYTable();				/* Init the game's YTable */
 	SetAPalette(rBlackPal);		/* Set the video palette */
 	ClearTheScreen(BLACK);		/* Set the screen to black */
 	BlastScreen();
@@ -440,6 +560,17 @@ OhShit:			/* Oh oh.... */
 		Pass2 = TRUE;
 	}
 	goto TryAgain;				/* Let's try again */
+}
+
+void GrabMouse(void)
+{
+	if (MouseEnabled)
+		SDL_SetWindowRelativeMouseMode(SdlWindow, TRUE);
+}
+
+void UngrabMouse(void)
+{
+	SDL_SetWindowRelativeMouseMode(SdlWindow, FALSE);
 }
 
 /**********************************
@@ -538,6 +669,7 @@ void DrawPsyched(Word Index)
 	Factor = Factor / (float) MAXINDEX;
 	PsychedRect.w = SDL_floorf(Factor);
 	BlitScreen();
+	SDL_RenderTexture(SdlRenderer, SdlTexture, NULL, NULL);
 	SDL_RenderFillRect(SdlRenderer, &PsychedRect);
 	SDL_RenderPresent(SdlRenderer);
 }
@@ -548,17 +680,8 @@ void EndGetPsyched(void)
 	SetAPalette(rBlackPal);		/* Zap the palette */
 }
 
-Word ChooseGameDiff(void)
-{
-	difficulty = 1;
-	return TRUE;
-}
-
 void ShareWareEnd(void)
 {
-	SetAPalette(rGamePal);
-	DoMyAlert(EndGameWin);
-	SetAPalette(rBlackPal);
 }
 
 
@@ -823,6 +946,101 @@ Boolean ChooseSaveGame(void)
 	SDL_LockMutex(DialogMutex);
 	SDL_UnlockMutex(DialogMutex);
 	return DialogCancel;
+}
+
+static Boolean StrToBool(const char *value) {
+	return SDL_strcasecmp(value, "true") == 0
+		|| SDL_strcasecmp(value, "1") == 0;
+}
+
+static const char *const KeyPrefNames[12] = {
+	"Attack", "Run", "NextWeapon", "AutoMap", "Forward", "Backward",
+	"TurnLeft", "TurnRight", "Action", "Strafe", "StrafeLeft", "StrafeRight"};
+
+static int PrefsIniHandler(void* User, const char* Section, const char* Name, const char* Value)
+{
+	int i;
+	SDL_Scancode Code;
+	if (SDL_strcasecmp(Section, "main") == 0) {
+		if (SDL_strcasecmp(Name, "state") == 0) {
+			SystemState = SDL_atoi(Value) & 3;
+		} else if (SDL_strcasecmp(Name, "mouse") == 0) {
+			MouseEnabled = StrToBool(Value);
+		} else if (SDL_strcasecmp(Name, "governor") == 0) {
+			SlowDown = StrToBool(Value);
+		} else if (SDL_strcasecmp(Name, "viewsize") == 0) {
+			GameViewSize = SDL_atoi(Value);
+			if (GameViewSize > 3) GameViewSize = 3;
+		} else if (SDL_strcasecmp(Name, "difficulty") == 0) {
+			difficulty = SDL_atoi(Value);
+			if (difficulty > 3) difficulty = 3;
+		}
+	} else if (SDL_strcasecmp(Section, "keys") == 0) {
+		for (i = 0; i < 12; i++) {
+			if (SDL_strcasecmp(Name, KeyPrefNames[i]) == 0) {
+				Code = SDL_GetScancodeFromName(Value);
+				if (Code != SDL_SCANCODE_UNKNOWN)
+					KeyBinds[11-i] = Code;
+			}
+		}
+	}
+	return 1;
+}
+
+void LoadPrefs(void)
+{
+	SDL_Storage *Storage;
+	char *Buf;
+	Uint64 BufLen;
+
+	SystemState = 3;			/* Assume sound & music enabled */
+	MouseEnabled = FALSE;		/* Mouse control shut off */
+	SlowDown = TRUE;			/* Enable speed governor */
+	GameViewSize = 3;			/* 640 mode screen */
+	difficulty = 2;				/* Medium difficulty */
+
+	Storage = PrefStorage();
+	if (!Storage)
+		return;
+	if (!SDL_GetStorageFileSize(Storage, PrefsFile, &BufLen))
+		return;
+	Buf = SDL_malloc(BufLen+1);
+	if (!Buf) err(1, "malloc");
+	if (!SDL_ReadStorageFile(Storage, PrefsFile, Buf, BufLen))
+		goto Done;
+	Buf[BufLen] = 0;
+	ini_parse_string(Buf, PrefsIniHandler, NULL);
+Done:
+	SDL_free(Buf);
+}
+
+/**********************************
+
+	Save the prefs file to disk but ignore any errors
+
+**********************************/
+
+void SavePrefs(void)
+{
+	char Buf[4096];
+	char * const End = Buf + sizeof Buf;
+	char *B = Buf;
+	SDL_Storage *Storage;
+	int i;
+
+	Storage = PrefStorage();
+	if (!Storage)
+		return;
+	B += snprintf(B, End - B, "[Main]\n");
+	B += snprintf(B, End - B, "State = %d\n", SystemState);
+	B += snprintf(B, End - B, "Mouse = %d\n", MouseEnabled);
+	B += snprintf(B, End - B, "Governor = %d\n", SlowDown);
+	B += snprintf(B, End - B, "ViewSize = %d\n", GameViewSize);
+	B += snprintf(B, End - B, "Difficulty = %d\n", difficulty);
+	B += snprintf(B, End - B, "[Keys]\n");
+	for (i = 0; i < 12; i++)
+		B += snprintf(B, End - B, "%s = %s\n", KeyPrefNames[i], SDL_GetScancodeName(KeyBinds[11-i]));
+	SDL_WriteStorageFile(Storage, PrefsFile, Buf, B - Buf);
 }
 
 /**********************************

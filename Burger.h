@@ -7,6 +7,14 @@ typedef uint32_t LongWord;
 typedef uint8_t Byte;
 typedef uint8_t Boolean;
 
+struct Rect {
+  short               top;
+  short               left;
+  short               bottom;
+  short               right;
+};
+typedef struct Rect                     Rect;
+
 #define BLACK 255
 #define DARKGREY 250
 #define BROWN 101
@@ -23,6 +31,7 @@ typedef uint8_t Boolean;
 #define PERIWINKLE 120
 #define LIGHTGREY 43
 #define WHITE 0
+#define WHITE2 31
 
 #define SfxActive 1
 #define MusicActive 2
@@ -59,7 +68,7 @@ void DLZSS(Byte *restrict Dest,const Byte *restrict Src,LongWord Length);
 
 void WaitTick(void);
 void WaitTicks(Word TickCount);
-Word WaitTicksEvent(Word TickCount);
+int WaitTicksEvent(Word TickCount);
 Word WaitEvent(void);
 LongWord ReadTick(void);
 void *AllocSomeMem(LongWord Size);
@@ -71,6 +80,7 @@ void StopSound(Word SndNum);
 void PlaySong(Word SongNum);
 
 void ClearTheScreen(Word Color);
+void FillRect(const Rect *R, Word Color);
 void ShowPic(Word PicNum);
 
 void InitYTable(void);
@@ -78,8 +88,9 @@ void InstallAFont(Word FontNum);
 void FontUseMask(void);
 void FontUseZero(void);
 void SetFontXY(Word x,Word y);
-void FontSetColor(Word Index,Word Color);
-void DrawAString(char *TextPtr);
+void FontSetClip(const Rect *Rect);
+void FontSetColor(Word Color);
+void DrawAString(const char *TextPtr);
 void DrawAChar(Word Letter);
 void ultoa(LongWord Val,char *TextPtr);
 Word GetRandom(Word Range);
@@ -99,7 +110,9 @@ void FadeToPtr(unsigned char *PalPtr);
 
 void RegisterSounds(short *SoundIDs);
 void InitResources(void);
-Boolean LoadLevelResources(void);
+void KillResources(void);
+Boolean MountMapFileAbsolute(const char *FileName);
+Boolean MountMapFile(const char *FileName);
 void *LoadAResource(Word RezNum);
 LongWord ResourceLength(Word RezNum);
 void ReleaseAResource(Word RezNum);

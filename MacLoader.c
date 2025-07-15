@@ -1,68 +1,111 @@
-#include "Burger.h"
-#include "res.h"
+#include "SDLWolf.h"
 #include <string.h>
-#include <stdio.h>
 #include <err.h>
-#include <SDL3/SDL.h>
 
 typedef uint32_t __attribute__((aligned(1), may_alias)) u_uint32_t;
+typedef uint16_t __attribute__((aligned(1), may_alias)) u_uint16_t;
 
 typedef struct {
 	void *data;
 } Resource;
 
+static const char *MainResourceFile = "Wolf3D.rsrc";
+static const char *LevelsFolder = "Levels/";
+static const char *DefaultLevelsPath = "Levels/_Second_Encounter_(30_Levels).rsrc";
 
-static const char *MainResourceFile = "data/Wolf3D.rsrc";
-static char *LevelsPath = "data/Levels/_Second_Encounter_(30_Levels).rsrc";
-static const uint32_t ResType = 0x42524752; /* BRGR */
+static const uint32_t BrgrType = 0x42524752; /* BRGR */
+static const uint32_t PictType = 0x50494354; /* PICT */
 static const uint32_t CsndType = 0x63736E64; /* csnd */
-static RFILE *MainResources = NULL;
+
+RFILE *MainResources = NULL;
 static Resource *ResourceCache = NULL;
 static RFILE *LevelResources = NULL;
 static Resource *LevelResourceCache = NULL;
 static LongWord NumSounds = 0;
 static Sound *SoundCache = NULL;
 
-static RFILE *LoadResources(const char *Filename, Resource **cache_out) {
+static RFILE *LoadResources(const char *FileName, Resource **CacheOut) {
 	size_t Count;
 	RFILE *Rp;
 	Resource *Cache;
 
-	Rp = res_open(Filename, 0);
+	Rp = res_open(FileName, 0);
 	if (!Rp)
 		return NULL;
-	Count = res_count(Rp, ResType);
+	Count = res_count(Rp, BrgrType);
 	Cache = SDL_calloc(Count, sizeof(Resource));
 	if (!Cache) {
 		res_close(Rp);
 		return NULL;
 	}
-	*cache_out = Cache;
+	*CacheOut = Cache;
 	return Rp;
+}
+
+static void ReleaseResources(RFILE **Rp, Resource **Cache)
+{
+	if (*Rp) {
+		uint32_t Count = res_count((*Rp), BrgrType);
+		res_close((*Rp));
+		*Rp = NULL;
+		if (*Cache) {
+			for (int i = 0; i < Count; i++)
+				if ((*Cache)[i].data)
+					SDL_free((*Cache)[i].data);
+			SDL_free(*Cache);
+			*Cache = NULL;
+		}
+	}
 }
 
 void InitResources(void)
 {
+	const char *BasePath;
 	if (MainResources)
 		return;
-	MainResources = LoadResources(MainResourceFile, &ResourceCache);
+	BasePath = PrefPath();
+	char TmpPath[strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1];
+	stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
+	MainResources = LoadResources(TmpPath, &ResourceCache);
 	if (!MainResources)
-		err(1, "%s", MainResourceFile);
+		err(1, "%s", TmpPath);
 }
 
-Boolean LoadLevelResources(void)
+
+void KillResources(void)
 {
-	if (LevelResources) {
-		uint32_t Count = res_count(LevelResources, ResType);
-		res_close(LevelResources);
-		for (int i = 0; i < Count; i++)
-			if (LevelResourceCache[i].data)
-				SDL_free(LevelResourceCache[i].data);
-		SDL_free(ResourceCache);
-		ResourceCache = NULL;
-	}
-	LevelResources = LoadResources(LevelsPath, &LevelResourceCache);
+	ReleaseResources(&MainResources, &ResourceCache);
+	ReleaseResources(&LevelResources, &LevelResourceCache);
+}
+
+Boolean MountMapFileAbsolute(const char *FileName)
+{
+	ReleaseResources(&LevelResources, &LevelResourceCache);
+	LevelResources = LoadResources(FileName, &LevelResourceCache);
+	if (LevelResources == NULL)
+		warn("MountMapFile: %s", FileName);
 	return LevelResources != NULL;
+}
+
+Boolean MountMapFile(const char *FileName)
+{
+	const char *BasePath;
+
+	if (!FileName)
+		FileName = DefaultLevelsPath;
+	BasePath = PrefPath();
+	char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + strlen(FileName) + 1];
+	stpcpy(stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder), FileName);
+	return MountMapFileAbsolute(TmpPath);
+}
+
+bool EnumerateLevels(SDL_EnumerateDirectoryCallback callback, void *userdata)
+{
+	const char *BasePath;
+	BasePath = PrefPath();
+	char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1];
+	stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
+	return SDL_EnumerateDirectory(TmpPath, callback, userdata);
 }
 
 static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
@@ -70,14 +113,14 @@ static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
 	ResAttr Attr;
 	void *Data;
 
-	if (res_attr(Rp, ResType, RezNum, &Attr) == NULL)
+	if (res_attr(Rp, BrgrType, RezNum, &Attr) == NULL)
 		return NULL;
 	if (Cache[Attr.index].data)
 		return Cache[Attr.index].data;
 	Data = SDL_malloc(Attr.size);
 	if (!Data)
 		return NULL;
-	if (!res_read_ind(Rp, ResType, Attr.index, Data, 0, Attr.size, NULL, NULL)) {
+	if (!res_read_ind(Rp, BrgrType, Attr.index, Data, 0, Attr.size, NULL, NULL)) {
 		SDL_free(Data);
 		return NULL;
 	}
@@ -88,9 +131,11 @@ static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
 static Resource *GetResource(Word RezNum)
 {
 	Resource *Res;
-	Res = GetResource2(RezNum, LevelResources, LevelResourceCache);
-	if (Res)
-		return Res;
+	if (LevelResources) {
+		Res = GetResource2(RezNum, LevelResources, LevelResourceCache);
+		if (Res)
+			return Res;
+	}
 	return GetResource2(RezNum, MainResources, ResourceCache);
 }
 
@@ -113,7 +158,11 @@ void *LoadAResource(Word RezNum)
 LongWord ResourceLength(Word RezNum)
 {
 	ResAttr attr;
-	if (res_attr(MainResources, ResType, RezNum, &attr))
+	if (LevelResources) {
+		if (res_attr(LevelResources, BrgrType, RezNum, &attr))
+			return attr.size;
+	}
+	if (res_attr(MainResources, BrgrType, RezNum, &attr))
 		return attr.size;
 	return 0;
 }
@@ -127,12 +176,12 @@ LongWord ResourceLength(Word RezNum)
 void ReleaseAResource(Word RezNum)
 {
 	ResAttr attr;
-	if (res_attr(LevelResources, ResType, RezNum, &attr)) {
+	if (LevelResources && res_attr(LevelResources, BrgrType, RezNum, &attr)) {
 		if (LevelResourceCache[attr.index].data) {
 			SDL_free(LevelResourceCache[attr.index].data);
 			LevelResourceCache[attr.index].data = NULL;
 		}
-	} else if (res_attr(MainResources, ResType, RezNum, &attr)) {
+	} else if (res_attr(MainResources, BrgrType, RezNum, &attr)) {
 		if (ResourceCache[attr.index].data) {
 			SDL_free(ResourceCache[attr.index].data);
 			ResourceCache[attr.index].data = NULL;
@@ -309,4 +358,135 @@ static int SearchSounds(const void *a, const void *b) {
 Sound *LoadSound(Word RezNum)
 {
 	return bsearch((void*)(size_t)RezNum, SoundCache, NumSounds, sizeof(Sound), SearchSounds);
+}
+
+/**********************************
+
+	Menus
+
+**********************************/
+
+static void FreePixels(void *userdata, void *value)
+{
+	SDL_free(value);
+}
+
+SDL_Surface *LoadPict(RFILE *Rp, Word PicNum)
+{
+	ResAttr Attr;
+	Byte *Data;
+	Byte *Pixels = NULL;
+	Word Stride;
+	Word W;
+	Word H;
+	const u_uint16_t *PalPtr;
+	int i;
+	int j;
+	int y;
+	SDL_Surface *Surface = NULL;
+	SDL_Palette *Palette;
+	SDL_Color Colors[256];
+
+	/* Extremely limited support for RLE encoded quickdraw PICT files */
+	if (!res_attr(Rp, PictType, PicNum, &Attr))
+		return NULL;
+	if (Attr.size < 0x87E)
+		return NULL;
+	Data = SDL_malloc(Attr.size);
+	if (!Data) return NULL;
+	if (!res_read_ind(Rp, PictType, Attr.index, Data, 0, Attr.size, NULL, NULL))
+		goto Done;
+	if (SwapUShortBE(*(const u_uint16_t*)&Data[0x34]) != 0x0098) /* check for RLE opcode */
+		goto Done;
+
+	Stride = SwapUShortBE(*(const u_uint16_t*)&Data[0x36]) & 0x7FFF;
+	W = SwapUShortBE(*(const u_uint16_t*)&Data[0x8]) - SwapUShortBE(*(const u_uint16_t*)&Data[0x4]);
+	H = SwapUShortBE(*(const u_uint16_t*)&Data[0x6]) - SwapUShortBE(*(const u_uint16_t*)&Data[0x2]);
+	Pixels = SDL_malloc(Stride*H);
+	if (!Pixels)
+		goto Done;
+
+	{
+		const Byte *Packed;
+		const Byte *PackedEnd;
+		Byte *Pix;
+		Byte *PixelsEnd;
+		Byte *NextRow;
+		Byte Value;
+		Word PackedCount;
+		short Count;
+
+		Pix = Pixels;
+		PixelsEnd = Pixels + Stride * H;
+		Packed = &Data[0x87E];
+		PackedEnd = Data + Attr.size;
+		for (y = 0; y < H; y++) {
+			NextRow = Pix + Stride;
+			if (Stride > 200) {
+				if (Packed >= PackedEnd - 1)
+					break;
+				PackedCount = (Packed[0]<<8)|Packed[1];
+				Packed += 2;
+			} else {
+				if (Packed >= PackedEnd)
+					break;
+				PackedCount = *Packed++;
+			}
+			for (i = Packed - Data + PackedCount; Packed - Data < i;) {
+				if (Packed >= PackedEnd)
+					break;
+				Count = (char)*Packed++;
+				if (Count < 0) {			/* RLE */
+					if (Packed >= PackedEnd)
+						break;
+					Value = *Packed++;
+					for (j = 0; j < -Count + 1; j++) {
+						if (Pix >= PixelsEnd)
+							break;
+						*Pix++ = Value;
+					}
+				} else {					/* Copy */
+					for (j = 0; j < Count + 1; j++) {
+						if (Packed >= PackedEnd)
+							break;
+						if (Pix >= PixelsEnd)
+							break;
+						*Pix++ = *Packed++;
+					}
+				}
+			}
+			if (Pix != NextRow)
+				break;
+		}
+		if (Pix != PixelsEnd)
+			goto Done;
+	}
+
+	Surface = SDL_CreateSurfaceFrom(W, H, SDL_PIXELFORMAT_INDEX8, Pixels, Stride);
+	if (!Surface)
+		goto Done;
+	if (!SDL_SetPointerPropertyWithCleanup(SDL_GetSurfaceProperties(Surface), "Wolf.pixels", Pixels, FreePixels, NULL))
+		goto Done;
+	Pixels = NULL;
+	Palette = SDL_CreateSurfacePalette(Surface);
+	if (!Palette) {
+		SDL_DestroySurface(Surface);
+		Surface = NULL;
+		goto Done;
+	}
+	PalPtr = (const u_uint16_t*)&Data[0x6E];
+
+	i = 0;
+	do {
+		Colors[i].r = SwapUShortBE(PalPtr[i*4+0])/0x101;
+		Colors[i].g = SwapUShortBE(PalPtr[i*4+1])/0x101;
+		Colors[i].b = SwapUShortBE(PalPtr[i*4+2])/0x101;
+		Colors[i].a = 255;
+	} while (++i<255);
+	SDL_SetPaletteColors(Palette, Colors, 0, 256);
+Done:
+	if (Pixels)
+		SDL_free(Pixels);
+	SDL_free(Data);
+	return Surface;
 }

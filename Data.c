@@ -34,6 +34,7 @@ Word joystick1;						/* Joystick value */
 int mousex;							/* Mouse x movement */
 int mousey;							/* Mouse y movement */
 int	mouseturn;						/* Mouse turn movement */
+int mousewheel;						/* Mouse wheel */
 Word nextmap;						/* Next map to warp to */
 Word facecount;						/* Time to show a specific head */
 Word faceframe;						/* Head pic to show */
@@ -75,10 +76,12 @@ LongWord rw_scale;
 Byte *ArtData[64];
 void *SpriteArray[S_LASTONE];
 Word MacVidSize = -1;
+Boolean PauseExited=FALSE;
 Word SlowDown = 1;			/* Force the game to 15 hz */
 Word MouseEnabled = 0;		/* Allow mouse control */
 Word GameViewSize = 3;		/* Size of the game screen */
 Word NoWeaponDraw=1;			/* Flag to not draw the weapon on the screen */
+LongWord ScenarioIndex=0;		/* Currently playing scenario */
 maplist_t *MapListPtr = NULL;		/* Pointer to map info record */
 short *SoundListPtr = NULL;	/* Pointer to sound list record */
 unsigned short *SongListPtr = NULL;	/* Pointer to song list record */

@@ -9,7 +9,9 @@ srcs = [
   'InterMis.c',
   'Intro.c',
   'Level.c',
+  'MacFont.c',
   'MacLoader.c',
+  'MacMenu.c',
   'Missiles.c',
   'Music.c',
   'PlMove.c',
@@ -27,8 +29,9 @@ srcs = [
   'StateDef.c',
   'WolfIO.c',
   'WolfMain.c',
+  'ini.c',
   'res.c',
 ]
-deps = [dependency('sdl3'), cc.find_library('m', required : false)]
+deps = [dependency('sdl3'), dependency('fluidsynth'), cc.find_library('m', required : false)]
 executable(meson.project_name(), srcs, dependencies: deps)
 

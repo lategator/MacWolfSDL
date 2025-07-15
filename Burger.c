@@ -21,23 +21,16 @@
 Word DoEvent(SDL_Event *event);
 void BlastScreen(void);
 
-Word NoSystemMem;
+extern unsigned char MacFont[];
 unsigned char *VideoPointer;	/* Pointer to video memory */
-extern Word QuitFlag;			/* Did the application quit? */
 Word VideoWidth;				/* Width to each video scan line */
 Word SystemState=3;				/* Sound on/off flags */
 Word KilledSong;				/* Song that's currently playing */
 LongWord LastTick;				/* Last system tick (60hz) */
 Word FontX;						/* X Coord of font */
 Word FontY;						/* Y Coord of font */
-unsigned char *FontPtr;			/* Pointer to font image data */
-unsigned char *FontWidths;		/* Pointer to font width table */
-Word FontHeight;				/* Point size of current font */
-Word FontLast;					/* Number of font entries */
-Word FontFirst;					/* ASCII value of first char */
-Word FontLoaded;				/* Rez number of loaded font (0 if none) */
-Word FontInvisible;				/* Allow masking? */
-unsigned char FontOrMask[16];	/* Colors for font */
+Rect FontClip = { 0, 0, 0x7FFF, 0x7FFF };
+Byte FontColor = 255;			/* Colors for font */
 LongWord YTable[480];			/* Offsets to the screen */
 //SndChannelPtr myPaddleSndChan;	/* Sound channel */
 //Word ScanCode;
@@ -46,6 +39,11 @@ LongWord YTable[480];			/* Offsets to the screen */
 //extern GDHandle gMainGDH;
 //extern CTabHandle MainColorHandle;
 //extern Boolean DoQuickDraw;
+
+typedef struct {
+	uint8_t w: 4, h: 4;
+	uint8_t xa: 4, yo: 4;
+} glyph_t;
 
 /**********************************
 
@@ -130,7 +128,7 @@ Word WaitEvent(void)
 
 **********************************/
 
-Word WaitTicksEvent(Word Time)
+int WaitTicksEvent(Word Time)
 {
 	SDL_Event event;
 
@@ -139,7 +137,7 @@ Word WaitTicksEvent(Word Time)
 			if (event.type == SDL_EVENT_QUIT)
 				GoodBye();
 			else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
-				return 0;
+				return -event.button.button;
 			else if (event.type == SDL_EVENT_KEY_DOWN)
 				return event.key.key;
 		}
@@ -522,6 +520,147 @@ void ClearTheScreen(Word Color)
 	} while (--y);
 }
 
+void FillRect(const Rect *R, Word Color)
+{
+	int x,y,w,h;
+	unsigned char *TempPtr;
+
+	w = (R->right > SCREENWIDTH ? SCREENWIDTH : R->right) - (R->left > 0 ? R->left : 0);
+	h = (R->bottom > SCREENHEIGHT ? SCREENHEIGHT : R->bottom) - (R->top > 0 ? R->top : 0);
+	if (w <= 0 || h <= 0 || R->left >= SCREENWIDTH || R->top >= SCREENHEIGHT)
+		return;
+	TempPtr = &VideoPointer[YTable[R->top]+R->left];
+	for (y = 0; y < h; y++) {
+		for (x = 0; x < w; x++) {
+			TempPtr[x] = Color;	/* Fill color */
+		}
+		TempPtr += VideoWidth;	/* Next line down */
+	}
+}
+
+/**********************************
+
+		Draw a text string
+
+**********************************/
+
+void DrawAString(const char *TextPtr)
+{
+	Word X = FontX;
+	while (TextPtr[0]) {				/* At the end of the string? */
+		if (TextPtr[0] == '\n') {
+			FontX = X;
+			FontY += 18;
+		} else {
+			DrawAChar(TextPtr[0]);	/* Draw the char */
+		}
+		++TextPtr;						/* Continue */
+	}
+}
+
+/**********************************
+
+		Set the X/Y to the font system
+
+**********************************/
+
+void SetFontXY(Word x,Word y)
+{
+	FontX = x;
+	FontY = y;
+}
+
+void FontSetClip(const Rect *R)
+{
+	if (R)
+		FontClip = *R;
+	else
+		FontClip = (Rect){ 0, 0, 0x7FFF, 0x7FFF };
+}
+
+/**********************************
+
+		Set the color entry for the font
+
+**********************************/
+
+void FontSetColor(Word Color)
+{
+	FontColor = Color;
+}
+
+
+/**********************************
+
+		Draw a char to the screen
+
+**********************************/
+
+void DrawAChar(Word Letter)
+{
+	int Width;
+	int Height;
+	int MinX;
+	int MinY;
+	int MaxX;
+	int MaxY;
+	int Y;
+	int Width2;
+	const Byte *Font;
+	unsigned char *ScreenPtr;
+	unsigned char *Screenad;
+	const glyph_t *Glyph;
+
+	if (FontX >= SCREENWIDTH || FontX >= FontClip.right)
+		return;
+	if (FontY >= SCREENHEIGHT || FontY >= FontClip.bottom)
+		return;
+
+	Letter -= 32;			/* Offset from the first entry */
+	if (Letter>=128-32) {	/* In the font? */
+		return;				/* Exit then! */
+	}
+	Glyph = (const glyph_t*)&MacFont[(MacFont[Letter*2]<<8)|MacFont[Letter*2+1]];
+	Width = Glyph->w;		/* Get the pixel width of the entry */
+	Height = Glyph->h;
+	Font = (const Byte*)&Glyph[1];
+	Y = FontY + Glyph->yo;
+	if (FontX + Width <= FontClip.left)
+		return;
+	if (Y + Height <= FontClip.top)
+		return;
+
+	MinX = FontClip.left > 0 ? FontClip.left : 0;
+	MinY = FontClip.top > 0 ? FontClip.top : 0;
+	MaxX = FontClip.right < SCREENWIDTH ? FontClip.right : SCREENWIDTH;
+	MaxY = FontClip.bottom < SCREENHEIGHT ? FontClip.bottom : SCREENHEIGHT;
+	ScreenPtr = (unsigned char *) &VideoPointer[YTable[Y]+FontX];
+	if (FontX < MinX) {
+		Width -= MinX - FontX;
+		ScreenPtr += MinX - FontX;
+	}
+	if (Y < MinY) {
+		Height -= MinY - Y;
+		ScreenPtr += VideoWidth * (MinY - Y);
+	}
+	FontX += Glyph->xa;
+	if (FontX > MaxX)
+		Width -= FontX - MaxX;
+	if (Y + Height > MaxY)
+		Height = MaxY - Y;
+	FontX++;
+
+	for (; Height > 0; Height--) {
+		Screenad = ScreenPtr;
+		for (Width2 = Width; Width2 > 0; Width2--) {
+			if (*Font++)
+				*Screenad = FontColor;
+			Screenad++;
+		}
+		ScreenPtr += VideoWidth;
+	}
+}
+
 /**********************************
 
 	Palette Manager
@@ -636,7 +775,9 @@ static Word Count=1;
 
 void *AllocSomeMem(LongWord Size)
 {
-	return SDL_malloc(Size);
+	void *Buf = SDL_malloc(Size);
+	if (!Buf) err(1, "malloc");
+	return Buf;
 }
 
 /**********************************
