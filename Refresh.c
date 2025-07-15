@@ -157,7 +157,7 @@ void DrawAutomap(Word tx,Word ty)
 					tile = 59 /*(seg->dir&1) + 30*/;
 				} else if (tile & TI_PUSHWALL) {
 					if (ShowPush) {
-						tile = 64;
+						tile = 68;
 					} else {
 						tile = textures[y][x];
 					}
@@ -176,7 +176,10 @@ void DrawAutomap(Word tx,Word ty)
 	x = viewx>>8;
 	y = viewy>>8;
 	if (x >= tx && x < maxtx && y >= ty && y<maxty) {
-		DrawSmall(x-tx,y-ty,64);		/* Draw BJ's face here */
+		tile = ((gamestate.viewangle+ANGLES/8*3)&(ANGLES-1)) >> 7;	/* Force into a cardinal direction */
+		if (!(tile & 1))
+			tile ^= 2;
+		DrawSmall(x-tx,y-ty,tile+64);		/* Draw BJ's face here */
 	}
 	BlastScreen();
 }

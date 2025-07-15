@@ -153,9 +153,19 @@ S_TRANS_DTH1,
 S_TRANS_DTH2,
 S_TRANS_DTH3,S_G_KEY,0};
 
-static Byte EnemyHits[12];
+static Word GhostGreenSprs[] = {
+	S_GHOST_GREEN,0};
 
-static const Word *EnemySprs[] = {	/* This list MUST match class_t! */
+static Word GhostBlueSprs[] = {
+	S_GHOST_BLUE,0};
+
+static Word GhostYellowSprs[] = {
+	S_GHOST_YELLOW,0};
+
+static Word GhostRedSprs[] = {
+	S_GHOST_RED,0};
+
+static const Word *EnemySprs[ARRAYLEN(classinfo)] = {	/* This list MUST match class_t! */
 NaziSprs,
 OfficerSprs,
 SSSprs,
@@ -167,9 +177,15 @@ TransSprs,
 UberSprs,
 DKnightSprs,
 HitlerSprs,
-HitlerSprs
+HitlerSprs,
+HitlerSprs,
+GhostGreenSprs,
+GhostBlueSprs,
+GhostYellowSprs,
+GhostRedSprs,
 };
 
+static Byte EnemyHits[ARRAYLEN(EnemySprs)];
 
 static Byte WallHits[256];
 
@@ -297,7 +313,12 @@ actor_t *SpawnStand(Word x,Word y,class_t which)
 	ActorPtr->pic = states[state].shapenum;	/* What picture to display? */
 	ActorPtr->ticcount = states[state].tictime;	/* Initial tick count */
 	ActorPtr->state = state;
-	ActorPtr->flags = FL_SHOOTABLE | FL_NOTMOVING;	/* You can shoot it */
+	if (which < CL_GHOST_GREEN || which > CL_GHOST_RED) {
+		++gamestate.killtotal;		/* Another critter must die! */
+		ActorPtr->flags = FL_SHOOTABLE | FL_NOTMOVING;	/* You can shoot it */
+	} else {
+		ActorPtr->flags = 0;
+	}
 	ActorPtr->distance = 0;			/* No distance to travel */
 	ActorPtr->dir = nodir;				/* No direction of travel */
 	ActorPtr->areanumber = tile&TI_NUMMASK;	/* Area in */
@@ -310,7 +331,6 @@ actor_t *SpawnStand(Word x,Word y,class_t which)
 	ActorPtr->speed = info->speed;	/* Basic speed */
 	ActorPtr->hitpoints = info->hitpoints;	/* Starting hit points */
 	++numactors;	/* I now add one more actor to the list */
-	++gamestate.killtotal;		/* Another critter must die! */
 
 	return ActorPtr;
 }
@@ -492,10 +512,8 @@ void SpawnThings(void)
 			SpawnSecret(x,y);
 		} else if (type<108) {		/* 102-107 */
 			continue;
-		} else if (type<123) {		/* 108-122 */
+		} else if (type<126) {		/* 108-125 */
 			SpawnStand(x,y,(class_t) (type-108));
-		} else if (type<126) {		/* 123-125 */
-			continue;
 		} else if (type<140) {		/* 126-139 */
 			SpawnAmbush(x,y,(class_t) (type-126));
 		}
@@ -725,23 +743,24 @@ Word LoadSpriteArt(void)
 
 	i=1;
 	do {
+		SpriteArray[i] = NULL;
 		if (WallHits[i]) {
 			Num = i+(428-1);
 			MyPtr = LoadAResource(Num);	/* Get the packed file */
 			if (!MyPtr) {
-				return FALSE;
+				continue;
 			}
 			Size = ResourceLength(Num);
 			if (Size < 2) {
 				ReleaseAResource(Num);
-				return FALSE;
+				continue;
 			}
 			Length = MyPtr[0];				/* Get the length unpacked */
 			Length |= MyPtr[1]<<8;
 			MyNewPtr = (Byte *)AllocSomeMem(Length);		/* Get memory for the sprite */
 			if (!MyNewPtr) {
 				ReleaseAResource(Num);
-				return FALSE;
+				continue;
 			}
 			DLZSS(MyNewPtr,Length,&MyPtr[2], Size - 2);	/* Unpack it */
 			SpriteArray[i] = MyNewPtr;		/* Save the pointer */

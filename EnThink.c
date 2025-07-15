@@ -60,8 +60,10 @@ void KillActor(actor_t *ActorPtr)
 	case CL_SCHABBS:
 	case CL_TRANS:
 	case CL_UBER:
-	case CL_DKNIGHT:
 		PlaceItemType(S_G_KEY,ActorPtr);	/* Drop a key */
+		break;
+	case CL_DKNIGHT:
+		PlaceItemType(S_S_KEY,ActorPtr);	/* Drop a key */
 		break;
 	default:
 		break;
@@ -352,6 +354,13 @@ void A_Bite(actor_t *ActorPtr)
 	}
 }
 
+void A_Drain(actor_t *ActorPtr)
+{
+	if (CalcDistance(ActorPtr)<=BITERANGE) {	/* In range? */
+		TakeDamage(15,ActorPtr->x,ActorPtr->y);	/* Pass along the damage */
+	}
+}
+
 /**********************************
 
 	Return the distance between the player and this actor
@@ -509,7 +518,8 @@ call_t actioncalls[] = {
 	A_MechStep,
 	A_Victory,
 	A_Scream,
-	A_Thud
+	A_Thud,
+	A_Drain,
 };
 
 void MoveActors(void)

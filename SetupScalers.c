@@ -196,11 +196,11 @@ void MakeSmallFont(void)
 	Byte *DestPtr,*ArtStart;
 	Byte *TempPtr;
 
-	SmallFontPtr = AllocSomeMem(16*16*65);
+	SmallFontPtr = AllocSomeMem(16*16*69);
 	if (!SmallFontPtr) {
 		return;
 	}
-	memset(SmallFontPtr,0,16*16*65);		/* Erase the font */
+	memset(SmallFontPtr,0,16*16*69);		/* Erase the font */
 	i = 0;
 	DestPtr = SmallFontPtr;
 	do {
@@ -222,7 +222,12 @@ void MakeSmallFont(void)
 	} while (++i<64);
 	if (ResourceLength(MyBJFace) >= 16*16) {
 		TempPtr = LoadAResource(MyBJFace);
-		memcpy(DestPtr,TempPtr,16*16);
+		if (ResourceLength(MyBJFace) >= 16*16*5) {
+			memcpy(DestPtr,TempPtr,16*16*5);
+		} else {
+			for (i = 0; i < 5; i++)
+				DestPtr = memcpy(DestPtr,TempPtr,16*16) + 16*16;
+		}
 		ReleaseAResource(MyBJFace);
 	}
 

@@ -207,7 +207,6 @@ void Cmd_ChangeWeapon(void)
 
 actor_t *TargetEnemy (void)
 {
-	Word *xe;
 	Word i;
 	vissprite_t	*dseg;
 	actor_t *ActorPtr;
@@ -216,20 +215,18 @@ actor_t *TargetEnemy (void)
 
 	i = numvisspr;
 	if (i) {		/* Any drawn? */
-		xe = &firstevent[i-1];		/* Index to the CLOSEST sprite */
 		do {
-			dseg = &vissprites[xe[0]&(MAXVISSPRITES-1)];
+			dseg = xevents[i-1];		/* Index to the CLOSEST sprite */
 			if (dseg->actornum) {	/* static sprite or missile */
 				if (xscale[CENTERX] <= dseg->clipscale) {	/* Not obscured by a wall*/
 					if (dseg->x1 <= CENTERX+8 && dseg->x2 >= CENTERX-8) {
 						ActorPtr = &actors[dseg->actornum];		/* Get pointer to the actor */
-						if (!(ActorPtr->flags & FL_DEAD)) {		/* Dead already? */
+						if (!(ActorPtr->flags & FL_DEAD) && (ActorPtr->flags & FL_SHOOTABLE)) {		/* Dead already? */
 							return ActorPtr;			/* Shoot me! */
 						}
 					}
 				}
 			}
-			--xe;
 		} while (--i);
 	}
 	return 0;		/* No actor in range */

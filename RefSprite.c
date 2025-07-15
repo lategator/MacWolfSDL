@@ -1,119 +1,36 @@
 #include "WolfDef.h"
 #include <string.h>
 
-Word *src1,*src2,*dest;		/* Used by the sort */
-
-/**********************************
-
-	Merges src1/size1 and src2/size2 to dest
-	Both Size1 and Size2 MUST be non-zero
-
-**********************************/
-
-void Merge(Word Size1, Word Size2)
-{
-	Word *XDest,*XSrc1,*XSrc2;
-
-/* merge two parts of the unsorted array to the sorted array */
-
-	XDest = dest;
-	dest = &XDest[Size1+Size2];
-	XSrc1 = src1;
-	src1 = &XSrc1[Size1];
-	XSrc2 = src2;
-	src2 = &XSrc2[Size2];
-
-	if (XSrc1[0] < XSrc2[0]) {		/* Which sort to use? */
-mergefrom1:
-		do {
-			XDest[0] = XSrc1[0];	/* Copy one entry */
-			++XDest;
-			++XSrc1;
-			if (!--Size1) {			/* Any more? */
-				do {	/* Dump the rest */
-					XDest[0] = XSrc2[0];	/* Copy the rest of data */
-					++XDest;
-					++XSrc2;
-				} while (--Size2);
-				return;
-			}
-		} while (XSrc1[0] < XSrc2[0]);
-	}
-	do {
-		XDest[0] = XSrc2[0];
-		++XDest;
-		++XSrc2;
-		if (!--Size2) {
-			do {
-				XDest[0] = XSrc1[0];
-				++XDest;
-				++XSrc1;
-			} while (--Size1);
-			return;
-		}
-	} while (XSrc1[0] >= XSrc2[0]);
-	goto mergefrom1;
-}
-
 /**********************************
 
 	Sorts the events from xevents[0] to xevent_p
-	firstevent will be set to the first sorted event (either xevents[0] or sortbuffer[0])
+	firstevent will be set to the first sorted event
 
 **********************************/
 
-void SortEvents(void)
+void SimpleSort(void)
 {
-	Word	count;	/* Number of members to sort */
-	Word	size;	/* Entry size to sort with */
-	Word	sort;	/* Sort count */
-	Word	remaining;	/* Temp merge count */
-	Word	*sorted,*unsorted,*temp;
+	Boolean Moved;
+	Word i,j;
+	vissprite_t *Temp;
 
-	count = numvisspr;		/* How many entries are there? */
-	if (count<2) {
-		firstevent = xevents;	/* Just return the 0 or 1 entries */
-		return;				/* Leave now */
-	}
+	if (numvisspr <= 1)
+		return;
 
-	size = 1;		/* source size		(<<1 / loop)*/
-	sort = 1;		/* iteration number (+1 / loop)*/
-	sorted = xevents;
-	unsorted = sortbuffer;
-
+	i = numvisspr - 1;
 	do {
-		remaining = count>>sort;	/* How many times to try */
-
-		/* pointers incremented by the merge */
-		src1 = sorted;		/* Sorted array */
-		src2 = &sorted[remaining<<(sort-1)];	/* Half point */
-		dest = unsorted;	/* Dest array */
-
-		/* merge paired blocks*/
-		if (remaining) {	/* Any to sort? */
-			do {
-				Merge(size,size);	/* All groups equal size */
-			} while (--remaining);
-		}
-
-		/* copy or merge the leftovers */
-		remaining = count&((size<<1)-1);	/* Create mask (1 bit higher) */
-		if (remaining > size) {	/* one complete block and one fragment */
-			src1 = &src2[size];
-			Merge(remaining-size,size);
-		} else if (remaining) {	/* just a single sorted fragment */
-			memcpy(dest,src2,remaining*sizeof(Word));	/* Copy it */
-		}
-
-		/* get ready to sort back to the other array */
-
-		size <<= 1;		/* Double the entry size */
-		++sort;			/* Increase the shift size */
-		temp = sorted;	/* Swap the pointers */
-		sorted = unsorted;
-		unsorted = temp;
-	} while (size<count);
-	firstevent = sorted;
+		Moved = FALSE;
+		j = 0;
+		do {
+			if (xevents[j + 1]->clipscale < xevents[j]->clipscale) {
+				Temp = xevents[j];
+				xevents[j] = xevents[j + 1];
+				xevents[j + 1] = Temp;
+				Moved = TRUE;
+			}
+			j = j + 1;
+		} while (j < i);
+	} while (Moved);
 }
 
 /**********************************
@@ -123,11 +40,21 @@ void SortEvents(void)
 
 **********************************/
 
-void RenderSprite(Word x1,Word x2,vissprite_t *VisPtr)
+void RenderSprite(vissprite_t *VisPtr)
 {
 	Word column;
 	Word scaler;
+	short x1,x2;
+	short mid;
 
+	x1 = VisPtr->x1;
+	if (x1<0) {		/* Clip the left? */
+		x1 = 0;
+	}
+	x2 = VisPtr->x2;
+	if (x2>= (int)SCREENWIDTH) {	/* Clip the right? */
+		x2 = SCREENWIDTH-1;
+	}
 	scaler = VisPtr->clipscale;		/* Get the size of the sprite */
 	column = 0;					/* Start at the first column */
 	if ((int) x1 > VisPtr->x1) {		/* Clip the left? */
@@ -136,12 +63,22 @@ void RenderSprite(Word x1,Word x2,vissprite_t *VisPtr)
 
 /* calculate and draw each column */
 
-	do {
-		if (xscale[x1] <= scaler) {	/* Visible? */
-			IO_ScaleMaskedColumn(x1,scaler,VisPtr->pos,column>>FRACBITS);
+	if (VisPtr->actornum == (Word)-1) {
+		mid = VisPtr->x1 + ((VisPtr->x2-VisPtr->x1)>>1);
+		if (mid >= 0 && mid < SCREENWIDTH && xscale[mid] <= scaler) {
+			do {
+				IO_ScaleMaskedColumn(x1,scaler,VisPtr->pos,column>>FRACBITS);
+				column+=VisPtr->columnstep;		/* Next column (Fraction) */
+			} while (++x1<=x2);
 		}
-		column+=VisPtr->columnstep;		/* Next column (Fraction) */
-	} while (++x1<=x2);
+	} else {
+		do {
+			if (xscale[x1] <= scaler) {	/* Visible? */
+				IO_ScaleMaskedColumn(x1,scaler,VisPtr->pos,column>>FRACBITS);
+			}
+			column+=VisPtr->columnstep;		/* Next column (Fraction) */
+		} while (++x1<=x2);
+	}
 }
 
 /**********************************
@@ -208,7 +145,7 @@ void AddSprite (thing_t *thing,Word actornum)
 
 /* pack the vissprite number into the low 6 bits of the scale for sorting */
 
-	xevents[numvisspr] = (scale<<6) | numvisspr;		/* Pass the scale in the upper 10 bits */
+	xevents[numvisspr] = VisPtr;		/* Pass the scale in the upper 10 bits */
 	++numvisspr;		/* 1 more valid record */
 }
 
@@ -248,17 +185,12 @@ void DrawTopSprite(void)
 		VisRecord.x2 = x2;			/* Right edge */
 		VisRecord.clipscale = topspritescale;	/* Size */
 		VisRecord.columnstep = (SwapUShortBE(patch[0])<<8)/(x2-x1+1);	/* Width step */
+		VisRecord.actornum = -1;
 
 /* Make sure it is sorted to be drawn last */
 
 		memset(xscale,0,sizeof(xscale));		/* don't clip behind anything */
-		if (x1<0) {
-			x1 = 0;		/* Clip the left */
-		}
-		if (x2>=SCREENWIDTH) {
-			x2 = SCREENWIDTH-1;	/* Clip the right */
-		}
-		RenderSprite(x1,x2,&VisRecord);		/* Draw the sprite */
+		RenderSprite(&VisRecord);		/* Draw the sprite */
 	}
 }
 
@@ -270,13 +202,10 @@ void DrawTopSprite(void)
 
 void DrawSprites(void)
 {
-	vissprite_t	*dseg;		/* Pointer to visible sprite record */
-	int x1,x2;				/* Left x, Right x */
-	Word i;					/* Index */
+	Word i,j;				/* Index */
 	static_t *stat;			/* Pointer to static sprite record */
 	actor_t	*actor;			/* Pointer to active actor record */
 	missile_t *MissilePtr;	/* Pointer to active missile record */
-	Word *xe;				/* Pointer to sort value */
 
 	numvisspr = 0;			/* Init the sprite count */
 
@@ -320,23 +249,13 @@ void DrawSprites(void)
 
 /* sort sprites from back to front*/
 
-		SortEvents();
+		SimpleSort();
 
 /* draw from smallest scale to largest */
 
-		xe=firstevent;
+		j = 0;
 		do {
-			dseg = &vissprites[xe[0]&(MAXVISSPRITES-1)];	/* Which one? */
-			x1 = dseg->x1;
-			if (x1<0) {		/* Clip the left? */
-				x1 = 0;
-			}
-			x2 = dseg->x2;
-			if (x2>= (int)SCREENWIDTH) {	/* Clip the right? */
-				x2 = SCREENWIDTH-1;
-			}
-			RenderSprite(x1,x2,dseg);	/* Draw the sprite */
-			++xe;
+			RenderSprite(xevents[j++]);	/* Draw the sprite */
 		} while (--i);
 	}
 }

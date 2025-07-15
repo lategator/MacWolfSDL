@@ -57,9 +57,7 @@ Word topspritenum;					/* Shape of topmost sprite */
 Word xscale[1024];	/* Scale factor for width of the screen */
 Word numvisspr;				/* Number of valid visible sprites */
 vissprite_t	vissprites[MAXVISSPRITES];	/* Buffer for sprite records */
-Word xevents[MAXVISSPRITES]; /* Scale events for sprite sort */
-Word sortbuffer[MAXVISSPRITES];	/* mergesort requires an extra buffer*/
-Word *firstevent;			/* First event in sorted list */
+vissprite_t *xevents[MAXVISSPRITES]; /* Scale events for sprite sort */
 Boolean areavis[MAXAREAS];	/* Area visible */
 Word bspcoord[4];			/* Rect for the BSP search */
 Word TicCount;				/* Ticks since last screen draw */
@@ -95,7 +93,7 @@ Boolean ShowPush;			/* Cheat for pushwalls */
 Byte textures[MAPSIZE*2+5][MAPSIZE];	/* Texture indexes */
 Word NaziSound[] = {SND_ESEE,SND_ESEE2,SND_ESEE3,SND_ESEE4};
 
-classinfo_t	classinfo[12] = {	/* Info for all the bad guys */
+classinfo_t	classinfo[17] = {	/* Info for all the bad guys */
 	{SND_ESEE,SND_EDIE,		/* Nazi */
 	ST_GRD_WLK1, ST_GRD_STND, ST_GRD_ATK1,ST_GRD_PAIN,ST_GRD_DIE,
 	100, 5, 0x0F, 6},
@@ -143,4 +141,24 @@ classinfo_t	classinfo[12] = {	/* Info for all the bad guys */
 	{SND_HITLERSEE,SND_EDIE,			/* Hitler */
 	ST_HITLER_WLK1, ST_MHITLER_STND, ST_HITLER_ATK1,ST_GRD_STND,ST_HITLER_DIE,
 	5000, 8,0x01, 500},
+
+	{SND_NOSOUND,SND_EDIE,		/* Mutant */
+	ST_MUTANT_WLK1, ST_MUTANT_STND, ST_MUTANT_ATK1,ST_MUTANT_PAIN,ST_MUTANT_DIE,
+	400, 7, 0x01, 18},
+
+	{SND_NOSOUND,SND_EDIE,		/* Ghost 1 */
+	ST_GHOST_GREEN, ST_GHOST_GREEN, ST_GHOST_GREEN,ST_GHOST_GREEN,ST_GHOST_GREEN,
+	400, 7, 0x01, 18},
+
+	{SND_NOSOUND,SND_EDIE,		/* Ghost 2 */
+	ST_GHOST_BLUE, ST_GHOST_BLUE, ST_GHOST_BLUE,ST_GHOST_BLUE,ST_GHOST_BLUE,
+	400, 7, 0x01, 18},
+
+	{SND_NOSOUND,SND_EDIE,		/* Ghost 3 */
+	ST_GHOST_YELLOW, ST_GHOST_YELLOW, ST_GHOST_YELLOW,ST_GHOST_YELLOW,ST_GHOST_YELLOW,
+	400, 7, 0x01, 18},
+
+	{SND_NOSOUND,SND_EDIE,		/* Ghost 4 */
+	ST_GHOST_RED, ST_GHOST_RED, ST_GHOST_RED,ST_GHOST_RED,ST_GHOST_RED,
+	400, 7, 0x01, 18},
 };

@@ -87,6 +87,10 @@ Word CheckSide(Word x,Word y,actor_t *ActorPtr)
 		if (ActorPtr->class == CL_DOG)	{
 			return 0;	/* dogs can't open doors */
 		}
+		temp = doors[temp&TI_NUMMASK].info>>1;
+		if (temp==1 || temp==2) {
+			return 0;
+		}
 		return 2;		/* I have to open the door */
 	}
 	if (temp&(TI_BLOCKMOVE|TI_ACTOR)) {	/* Normally blocked? */

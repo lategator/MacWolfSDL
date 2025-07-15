@@ -141,6 +141,8 @@ void CloseDoor(door_t *door)
 	Word tile,tilex,tiley;
 	Word *TilePtr;
 	int delta;
+	Word area1,area2;
+	Byte *SoundNumPtr;
 
 /* don't close on anything solid */
 
@@ -171,6 +173,12 @@ void CloseDoor(door_t *door)
 				return;		/* It's touching the player! */
 			}
 		}
+	}
+	SoundNumPtr = MapPtr->areasoundnum;	/* Unlink the sound areas */
+	area1 = SoundNumPtr[door->area1];
+	area2 = SoundNumPtr[door->area2];
+	if (areabyplayer[area1] || areabyplayer[area2]) {	/* Can I hear it? */
+		PlaySound(SND_OPENDOOR);		/* Play the door sound */
 	}
 	door->action = DR_CLOSING;	/* Close the door */
 	TilePtr[0] |= (TI_BLOCKMOVE|TI_BLOCKSIGHT);	/* make the door space a solid tile*/
@@ -274,6 +282,11 @@ void DoorClosing(door_t *door)
 {
 	int position;
 	Byte *SoundNumPtr;
+
+	if (tilemap[door->tiley][door->tilex] & (TI_BODY|TI_GETABLE|TI_ACTOR)) {
+		OpenDoor(door);
+		return;
+	}
 
 	position = door->position-(DOORSPEED*TicCount);	/* Close a little more */
 

@@ -45,9 +45,9 @@ typedef unsigned short ufixed_t;	/* 8.8 unsigned fixed point number */
 
 **********************************/
 
-#define	MAXVISSPRITES 64	/* Maximum number of sprites to display (Must be a power of 2!) */
+#define	MAXVISSPRITES 512	/* Maximum number of sprites to display (Must be a power of 2!) */
 #define MAXACTORS	128		/* max number of nazis, etc / map */
-#define MAXSTATICS	200		/* max number of lamps, bonus, etc */
+#define MAXSTATICS	400		/* max number of lamps, bonus, etc */
 #define MAXMISSILES	32		/* max missiles, flames, smokes, etc */
 #define MAXDOORS	64		/* max number of sliding doors (64<=) */
 #define MAXAREAS	64		/* max number of bsp areas */
@@ -144,7 +144,8 @@ typedef enum {		/* Action logic states (MUST match actioncalls in EnThink.c */
 	A_MECHSTEP,		/* Mechahitler step sound */
 	A_VICTORY,		/* You win */
 	A_SCREAM,		/* Actor screams */
-	A_THUD			/* Hit the ground */
+	A_THUD,			/* Hit the ground */
+	A_DRAIN			/* Ghost attack */
 } actionlogic_t;
 
 typedef enum {		/* Index to the button array */
@@ -217,7 +218,11 @@ typedef enum {		/* actor class info*/
 	CL_MECHAHITLER,
 	CL_HITLER,
 
-	CL_PLAYER
+	CL_PLAYER,
+	CL_GHOST_GREEN,
+	CL_GHOST_BLUE,
+	CL_GHOST_YELLOW,
+	CL_GHOST_RED,
 } class_t;
 
 enum {BSPTOP,BSPBOTTOM,BSPLEFT,BSPRIGHT};	/* BSP quadrants */
@@ -736,9 +741,8 @@ extern void GameLoop(void);
 
 /* In RefSprite.c */
 
-extern void Merge(Word Size1,Word Size2);
-extern void SortEvents(void);
-extern void RenderSprite(Word x1,Word x2,vissprite_t *rs_seg);
+extern void SimpleSort(void);
+extern void RenderSprite(vissprite_t *rs_seg);
 extern void AddSprite(thing_t *thing,Word actornum);
 extern void DrawTopSprite(void);
 extern void DrawSprites(void);
@@ -841,7 +845,7 @@ extern Word OldMapNum;					/* Currently loaded map # */
 extern loadmap_t *MapPtr;				/* Pointer to current loaded map */
 extern short clipshortangle;				/* Angle for the left edge of the screen */
 extern short clipshortangle2;				/* clipshortangle * 2 */
-extern classinfo_t classinfo[12];		/* Class information for all bad guys */
+extern classinfo_t classinfo[17];		/* Class information for all bad guys */
 extern Word viewx;						/* X coord of camera */
 extern Word viewy;						/* Y coord of camera */
 extern fixed_t viewsin;					/* Base sine for viewing angle */
@@ -854,9 +858,7 @@ extern Word topspritenum;				/* Shape of topmost sprite */
 extern Word xscale[1024];		/* Scale factor for width of the screen */
 extern Word numvisspr;				/* Number of valid visible sprites */
 extern vissprite_t	vissprites[MAXVISSPRITES];	/* Buffer for sprite records */
-extern Word xevents[MAXVISSPRITES]; /* Scale events for sprite sort */
-extern Word sortbuffer[MAXVISSPRITES]; /* mergesort requires an extra buffer*/
-extern Word *firstevent;			/* First event in sorted list */
+extern vissprite_t *xevents[MAXVISSPRITES]; /* Scale events for sprite sort */
 extern Boolean areavis[MAXAREAS];	/* Area visible */
 extern Word bspcoord[4];			/* Rect for the BSP search */
 extern Word TicCount;				/* Ticks since last screen draw */
