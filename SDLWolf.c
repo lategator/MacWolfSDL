@@ -4,7 +4,6 @@
 #include "ini.h"
 #include <stdlib.h>
 #include <fluidsynth.h>
-#include <err.h>
 
 static const char *PrefOrg = NULL;
 static const char *PrefApp = "macwolfsdl";
@@ -46,16 +45,17 @@ extern int SelectedMenu;
 
 static void CloseAudio(void);
 static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt);
-void MacLoadSoundFont(void);
+static void FluidError(int Level, const char *Msg, void *Data);
 static void ProcessMusic(void *User, SDL_AudioStream *Stream, int Needed, int Total);
+void MacLoadSoundFont(void);
 
 void InitTools(void)
 {
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO))
-		errx(1, "SDL_Init");
+		BailOut("SDL_Init: %s", SDL_GetError());
 	SDL_SetAppMetadata("Wolfenstein 3D", "1.0", "wolf3dsnes");
 	LoadPrefs();
-	fluid_set_log_function(FLUID_PANIC, BailOut, NULL);
+	fluid_set_log_function(FLUID_PANIC, FluidError, NULL);
 	fluid_set_log_function(FLUID_ERR, NULL, NULL);
 	fluid_set_log_function(FLUID_WARN, NULL, NULL);
 	fluid_set_log_function(FLUID_INFO, NULL, NULL);
@@ -78,7 +78,7 @@ const char *PrefPath(void)
 	if (MyPrefPath)
 		return MyPrefPath;
 	MyPrefPath = SDL_GetPrefPath(PrefOrg, PrefApp);
-	if (!MyPrefPath) errx(1, "SDL_GetPrefPath: %s", SDL_GetError());
+	if (!MyPrefPath) BailOut("SDL_GetPrefPath: %s", SDL_GetError());
 	return MyPrefPath;
 }
 
@@ -127,7 +127,7 @@ void SetAPalettePtr(unsigned char *PalPtr)
 	SetPalette(SdlPalette, PalPtr);
 }
 
-void GoodBye()
+static void Cleanup(int status)
 {
 	CloseAudio();
 	if (FluidPlayer)
@@ -157,12 +157,30 @@ void GoodBye()
 	SDL_Quit();
 	if (SaveFileName)
 		SDL_free(SaveFileName);
-	exit(0);
+	exit(status);
 }
 
-void BailOut()
+void GoodBye(void)
 {
-	GoodBye();				/* Bail out! */
+	Cleanup(0);
+}
+
+void BailOut(const char *Fmt, ...)
+{
+	char Buf[1024];
+	va_list Args;
+
+	va_start(Args, Fmt);
+	vsnprintf(Buf, sizeof Buf, Fmt, Args);
+	fprintf(stderr, "%s\n", Buf);
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal Error", Buf, SdlWindow);
+	va_end(Args);
+	Cleanup(1);
+}
+
+static void FluidError(int Level, const char *Msg, void *Data)
+{
+	BailOut("FluidSynth: %s", Msg);
 }
 
 static void BlitSurfaceTex(SDL_Surface *Surface, SDL_Texture *Texture, const SDL_Rect *rect, Boolean Clear)
@@ -471,10 +489,10 @@ void ResizeGameWindow(Word Width, Word Height)
 	if (!SdlWindow) {
 		SdlWindow = SDL_CreateWindow("Wolfenstein 3D", MacWidth, MacHeight, 0);
 		if (!SdlWindow)
-			errx(1, "SDL_CreateWindow");
+			BailOut("SDL_CreateWindow: %s", SDL_GetError());
 		SdlRenderer = SDL_CreateRenderer(SdlWindow, NULL);
 		if (!SdlRenderer)
-			errx(1, "SDL_CreateRenderer");
+			BailOut("SDL_CreateRenderer: %s", SDL_GetError());
 	} else {
 		if (SdlSurface)
 			SDL_DestroySurface(SdlSurface);
@@ -488,16 +506,16 @@ void ResizeGameWindow(Word Width, Word Height)
 	}
 	SdlSurface = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
 	if (!SdlSurface)
-		errx(1, "SDL_CreateSurface");
+		BailOut("SDL_CreateSurface: %s", SDL_GetError());
 	SdlPalette = SDL_CreateSurfacePalette(SdlSurface);
 	if (!SdlPalette)
-		errx(1, "SDL_CreateSurfacePalette");
+		BailOut("SDL_CreateSurfacePalette: %s", SDL_GetError());
 	UIOverlay = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
 	if (!UIOverlay)
-		errx(1, "SDL_CreateSurface");
+		BailOut("SDL_CreateSurface: %s", SDL_GetError());
 	Palette = SDL_CreateSurfacePalette(UIOverlay);
 	if (!Palette)
-		errx(1, "SDL_CreateSurfacePalette");
+		BailOut("SDL_CreateSurfacePalette: %s", SDL_GetError());
 	if (ResourceLength(rGamePal) >= 768) {
 		SetPalette(Palette, LoadAResource(rGamePal));
 		ReleaseAResource(rGamePal);
@@ -506,10 +524,10 @@ void ResizeGameWindow(Word Width, Word Height)
 	SDL_SetSurfaceColorKey(UIOverlay, TRUE, 0);
 	SdlTexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
 	if (!SdlTexture)
-		errx(1, "SDL_CreateTexture");
+		BailOut("SDL_CreateTexture: %s", SDL_GetError());
 	UITexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
 	if (!UITexture)
-		errx(1, "SDL_CreateTexture");
+		BailOut("SDL_CreateTexture: %s", SDL_GetError());
 
 	if (SDL_MUSTLOCK(SdlSurface))
 		SDL_LockSurface(SdlSurface);
@@ -561,19 +579,19 @@ TryAgain:
 
 	GameShapeBuffer = LoadCompressed(VidPics[MacVidSize], &UnpackLength);	/* All the permanent game shapes */
 	if (!GameShapeBuffer)
-		goto Corrupted;
+		goto OhShit;
 	i = 0;
 	j = (MacVidSize==1) ? 47+10 : 47;		/* 512 mode has 10 shapes more */
 	LongPtr = (LongWord *) GameShapeBuffer;
 	if (UnpackLength < j * sizeof(LongWord))
-		goto Corrupted;
+		goto OhShit;
 	do {
 		Offset = SwapLongBE(LongPtr[i]);
 		if (UnpackLength < Offset + 4)
-			goto Corrupted;
+			goto OhShit;
 		Word *ShapePtr = (void*)(GameShapeBuffer+Offset);
 		if (UnpackLength < Offset + 4 + SwapUShortBE(ShapePtr[0]) * SwapUShortBE(ShapePtr[1]))
-			goto Corrupted;
+			goto OhShit;
 		GameShapes[i] = ShapePtr;
 	} while (++i<j);
 	if (Pass2) {		/* Low memory? */
@@ -585,11 +603,9 @@ TryAgain:
 	return MacVidSize;
 
 OhShit:			/* Oh oh.... */
-	if (GameShapeBuffer)
-		FreeSomeMem(GameShapeBuffer);
 	if (Pass2) {
 		if (!NewVidSize) {		/* At the smallest screen size? */
-			BailOut();
+			BailOut("Game data is corrupted");
 		}
 		--NewVidSize;			/* Smaller size */
 	} else {
@@ -599,9 +615,6 @@ OhShit:			/* Oh oh.... */
 		Pass2 = TRUE;
 	}
 	goto TryAgain;				/* Let's try again */
-Corrupted:
-	BailOut("Game data is corrupted");
-	__builtin_unreachable();
 }
 
 void GrabMouse(void)
@@ -1061,8 +1074,7 @@ void LoadPrefs(void)
 		return;
 	if (!SDL_GetStorageFileSize(Storage, PrefsFile, &BufLen))
 		return;
-	Buf = SDL_malloc(BufLen+1);
-	if (!Buf) err(1, "malloc");
+	Buf = AllocSomeMem(BufLen+1);
 	if (!SDL_ReadStorageFile(Storage, PrefsFile, Buf, BufLen))
 		goto Done;
 	Buf[BufLen] = 0;
@@ -1149,8 +1161,7 @@ static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt)
 		goto Fail;
 if (FluidSynth) {
 		MusicBufferFrames = (LongWord)BufSize * 2;
-		MusicBuffer = SDL_malloc(MusicBufferFrames * 2 * sizeof(int16_t));
-		if (!MusicBuffer) err(1, "malloc");
+		MusicBuffer = AllocSomeMem(MusicBufferFrames * 2 * sizeof(int16_t));
 	}
 	for (int i = 0; i < NAUDIOCHANS; i++) {
 		SdlSfxNums[i] = -1;
@@ -1241,7 +1252,7 @@ void BeginSongLooped(Word Song)
 	SDL_free(Data);
 }
 
-void EndSong()
+void EndSong(void)
 {
 	if (!FluidPlayer || !SdlAudioDevice)
 		return;

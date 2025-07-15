@@ -296,7 +296,7 @@ void PrepPlayLoop (void)
 Again:
 			ReleaseMap();		/* Oh oh... */
 			if (!GameViewSize) {	/* Smallest screen? */
-				BailOut();		/* Leave... */
+				BailOut("Failed to set up video mode");
 			}
 			--GameViewSize;		/* Smaller screen size */
 			GameViewSize = NewGameWindow(GameViewSize);

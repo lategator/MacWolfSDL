@@ -2,7 +2,6 @@
 #include "WolfDef.h"
 #include "SDLWolf.h"
 #include <string.h>
-#include <err.h>
 
 typedef enum {
 	WS_NORMAL,
@@ -311,7 +310,7 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 	scenario_t *Scenario;
 
 	Buf = SDL_strdup(Name);
-	if (!Buf) err(1, "strdup");
+	if (!Buf) BailOut("Out of memory");
 	stpcpy(stpcpy(TmpPath, Dir), Name);
 	Rp = res_open(TmpPath, 0);
 	if (!Rp)
@@ -319,7 +318,7 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 
 	ScenarioCount++;
 	Scenarios = SDL_realloc(Scenarios, ScenarioCount * sizeof(scenario_t));
-	if (!Scenarios) err(1, "realloc");
+	if (!Scenarios) BailOut("Out of memory");
 	Scenario = &Scenarios[ScenarioCount-1];
 	Scenario->pic = NULL;
 	Scenario->name = Buf;
@@ -564,7 +563,7 @@ TryIt:
 			if (!StartupRendering(GameViewSize)) {	/* Set the size of the game screen */
 				ReleaseScalers();
 				if (!GameViewSize) {
-					BailOut();
+					BailOut("Failed to set up video mode");
 				}
 				--GameViewSize;
 				goto TryIt;
@@ -806,7 +805,7 @@ TryIt:
 				if (!StartupRendering(GameViewSize)) {	/* Set the size of the game screen */
 					ReleaseScalers();
 					if (!GameViewSize) {
-						BailOut();
+						BailOut("Failed to set up video mode");
 					}
 					--GameViewSize;
 					goto TryIt;

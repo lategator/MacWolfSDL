@@ -1,8 +1,8 @@
 #include "WolfDef.h"
 #include "SDLWolf.h"
 #include <string.h>
+#include <errno.h>
 #include <fluidsynth.h>
-#include <err.h>
 
 typedef struct {
 	void *data;
@@ -76,7 +76,7 @@ void InitResources(void)
 	stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
 	MainResources = LoadResources(TmpPath, &ResourceCache);
 	if (!MainResources)
-		err(1, "%s", TmpPath);
+		BailOut("%s: %s", TmpPath, strerror(errno));
 }
 
 void KillResources(void)
@@ -95,7 +95,7 @@ Boolean MountMapFileAbsolute(const char *FileName)
 	WallListPtr = NULL;
 	LevelResources = LoadResources(FileName, &LevelResourceCache);
 	if (LevelResources == NULL)
-		warn("MountMapFile: %s", FileName);
+		BailOut("MountMapFile: %s: %s", FileName, strerror(errno));
 	return LevelResources != NULL;
 }
 
@@ -472,7 +472,7 @@ void RegisterSounds(short *SoundIDs, LongWord Len)
 	for (short *SoundID = SoundIDs; Len > 0 && *SoundID != -1; SoundID++, Count++, Len--);
 	SoundCache = SDL_calloc(Count, sizeof(Sound));
 	NumSounds = Count;
-	if (!SoundCache) err(1, "malloc");
+	if (!SoundCache) BailOut("Out of memory");
 	i = 0;
 	for (short *SoundID = SoundIDs; *SoundID != -1; SoundID++, i++) {
 		SoundCache[i].ID = *SoundID;
@@ -637,8 +637,7 @@ void MacLoadSoundFont(void)
 	if (!SoundFont)
 		return;
 
-	Header = SDL_malloc(sizeof(SFHeader)+i*(sizeof(Instrument)+sizeof(Sound)));
-	if (!Header) err(1, "malloc");
+	Header = AllocSomeMem(sizeof(SFHeader)+i*(sizeof(Instrument)+sizeof(Sound)));
 	Header->ninstruments = i;
 	Header->nsounds = 0;
 	Header->iter = 0;
@@ -691,7 +690,7 @@ void MacLoadSoundFont(void)
 	}
 	if (Header->nsounds != Header->ninstruments) {
 		Header = SDL_realloc(Header, sizeof(SFHeader)+Header->ninstruments*sizeof(Instrument)+Header->nsounds*sizeof(Sound));
-		if (!Header) err(1, "realloc");
+		if (!Header) BailOut("Out of memory");
 	}
 	for (i = 0; i < Header->ninstruments; i++)
 		fluid_preset_set_data(Header->instruments[i].preset, &Header->instruments[i]);

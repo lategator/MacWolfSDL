@@ -9,7 +9,6 @@
 #include "Burger.h"
 #include "WolfDef.h"		/* Get the prototypes */
 #include <string.h>
-#include <err.h>
 #include <SDL3/SDL.h>
 
 /**********************************
@@ -786,7 +785,7 @@ static Word Count=1;
 void *AllocSomeMem(LongWord Size)
 {
 	void *Buf = SDL_malloc(Size);
-	if (!Buf) err(1, "malloc");
+	if (!Buf) BailOut("Out of memory");
 	return Buf;
 }
 
