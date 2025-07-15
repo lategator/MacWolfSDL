@@ -33,6 +33,7 @@ static LongWord MenuScrollY = 0;
 static LongWord ScenarioCount = 0;
 static SDL_Surface *MenuBG = NULL;
 static scenario_t *Scenarios = NULL;
+static char *NextScenarioPath = NULL;
 char *ScenarioPath = NULL;
 int SelectedMenu = -1;
 
@@ -108,6 +109,7 @@ typedef struct {
 typedef struct {
 	const char *name;
 	Boolean (*getvalue)(widget_t *, void *);
+	Boolean disabled;
 } menuitem_t;
 
 typedef struct {
@@ -192,10 +194,17 @@ static void MenuItemRender(widget_t *Widget, widgetstate_t State, void *Data)
 	menuitem_t *Item = Widget->ptr;
 	short X = Widget->rect.left;
 	short Y = Widget->rect.top;
+	Byte Color;
 
-	if (State & WS_SELECTED) {
+	if (Item->disabled) {
+		State = 0;
+		Color = 0x17;
+	} else if (State & WS_SELECTED) {
+		Color = WHITE2;
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 		SDL_RenderFillRect(SdlRenderer,&FRect(&Widget->rect));
+	} else {
+		Color = BLACK;
 	}
 	if (Item->getvalue && Item->getvalue(Widget, Data)) {
 		if (State & WS_SELECTED)
@@ -207,7 +216,7 @@ static void MenuItemRender(widget_t *Widget, widgetstate_t State, void *Data)
 				{X+3, Y+8+y}, {X+5, Y+10+y}, {X+11, Y+4+y},
 			}, 3);
 	}
-	FontSetColor(State & WS_SELECTED ? WHITE2 : BLACK);
+	FontSetColor(Color);
 	FontSetClip(&Widget->rect);
 	SetFontXY(X + 15, Y + 1);
 	DrawAString(Item->name);
@@ -333,27 +342,29 @@ static widgetclass_t EmptyClass = { NULL, NULL };
 
 static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, const char *Name)
 {
-	const char *NameStart;
 	char *NameBuf;
 	char *Path;
 	char *s;
+	const char *t;
 	RFILE *Rp;
 	scenario_t *Scenario;
+	size_t NameLen;
 	char c;
 
-	NameStart = Name;
-	while (*NameStart == '_' || isspace(*NameStart)) NameStart++;
-	NameBuf = SDL_strdup(NameStart);
-	if (!NameBuf) BailOut("Out of memory");
-	for (s = NameBuf; *s; s++) {
-		c = *s;
-		if (c == '.') {
-			*s = '\0';
-			break;
-		}
-		if (c == '_' || isspace(c))
+	NameLen = strlen(Name);
+	NameBuf = AllocSomeMem(NameLen+1);
+	for (s = NameBuf, t = Name; *t; s++, t++) {
+		c = *t;
+		if (isspace(c))
 			*s = ' ';
+		else if (c < ' ')
+			*s = '_';
+		else
+			*s = c;
 	}
+	*s = '\0';
+	if (NameLen >= 5 && !SDL_strcasecmp(".rsrc", &NameBuf[NameLen-5]))
+		NameBuf[NameLen-5] = '\0';
 
 	Path = AllocSomeMem(strlen(Dir) + strlen(Name) + 1);
 	stpcpy(stpcpy(Path, Dir), Name);
@@ -448,11 +459,22 @@ Word ChooseScenario(void)
 	Boolean Redraw;
 	Word RetVal = FALSE;
 
-	if (ScenarioPath) SDL_free(ScenarioPath);
-	ScenarioPath = NULL;
 	EnumerateLevels(MakeScenarioList, NULL);
 	qsort(Scenarios, ScenarioCount, sizeof(scenario_t), CompareScenario);
-	MenuPosY = ScenarioIndex >= ScenarioCount ? ScenarioCount - 1 : ScenarioIndex;
+	if (ScenarioPath) {
+		for (i = 0; i < ScenarioCount; i++) {
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_APPLE)
+			if (!SDL_strcasecmp(Scenarios[i].path, ScenarioPath)) {
+#else
+			if (!strcmp(Scenarios[i].path, ScenarioPath)) {
+#endif
+				MenuPosY = i;
+				break;
+			}
+		}
+	} else {
+		MenuPosY = 0;
+	}
 	MenuScrollY = MenuPosY >= ScenariosItemHeight ? MenuPosY - ScenariosItemHeight + 1 : MenuPosY;
 	ResizeGameWindow(369, 331);
 	ClearTheScreen(WHITE);
@@ -547,7 +569,7 @@ Word ChooseScenario(void)
 		for (i = 0; i < ScenarioCount; i++) {
 			SDL_free(Scenarios[i].name);
 			if (i == MenuPosY)
-				ScenarioPath = Scenarios[i].path;
+				NextScenarioPath = Scenarios[i].path;
 			else
 				SDL_free(Scenarios[i].path);
 			if (Scenarios[i].pic)
@@ -595,9 +617,9 @@ Word ChooseGameDiff(void)
 	PlaySound(SND_MENU);
 TryAgain:
 	if (!ChooseScenario()) {
-		if (ScenarioPath) {
-			SDL_free(ScenarioPath);
-			ScenarioPath = NULL;
+		if (NextScenarioPath) {
+			SDL_free(NextScenarioPath);
+			NextScenarioPath = NULL;
 		}
 		if (playstate == EX_STILLPLAYING || playstate == EX_AUTOMAP) {
 			GameViewSize = NewGameWindow(GameViewSize);
@@ -675,14 +697,17 @@ TryIt:
 	}
 
 	difficulty = MenuPosY;
-	if (ScenarioPath) {
-		ClearFrameBuffer();
-		RenderScreen();
-		RetVal = MountMapFile(ScenarioPath);
-		LoadMapSetData();
-		SDL_free(ScenarioPath);
-		ScenarioPath = NULL;
-	}
+	if (NextScenarioPath) {
+	   if (ScenarioPath)
+		   SDL_free(ScenarioPath);
+	   ScenarioPath = NextScenarioPath;
+	   ClearFrameBuffer();
+	   RenderScreen();
+	   RetVal = MountMapFile(ScenarioPath);
+	   LoadMapSetData();
+	   playstate = EX_NEWGAME;	/* Start a new game */
+	   SaveFileName = 0;		/* Zap the save game name */
+   }
 	return RetVal;
 }
 
@@ -693,26 +718,28 @@ static Boolean GetMouseEnabled() { return MouseEnabled; }
 static Boolean GetSlowDown() { return SlowDown; }
 static Boolean GetPaused() { return TRUE; }
 
+static menu_t FileMenu = {"File", (widget_t[7]){
+	{&MenuItemClass, {20, 13, 36, 144}, &(menuitem_t){"New Game..."}},
+	{&MenuItemClass, {36, 13, 52, 144}, &(menuitem_t){"Open"}},
+	{&MenuSeparatorClass, {52, 13, 68, 144}},
+	{&MenuItemClass, {68, 13, 84, 144}, &(menuitem_t){"Save"}},
+	{&MenuItemClass, {84, 13, 100, 144}, &(menuitem_t){"Save As..."}},
+	{&MenuSeparatorClass, {100, 13, 116, 144}},
+	{&MenuItemClass, {116, 13, 132, 144}, &(menuitem_t){"Quit"}},
+}, 7, {19, 12, 133, 145}, -1};
+static menu_t OptionsMenu = {"Options", (widget_t[8]){
+	{&MenuItemClass, {20, 54, 36, 233}, &(menuitem_t){"Full Screen", GetFullScreen}},
+	{&MenuItemClass, {36, 54, 52, 233}, &(menuitem_t){"Sound", GetSoundEnabled}},
+	{&MenuItemClass, {52, 54, 68, 233}, &(menuitem_t){"Music", GetMusicEnabled}},
+	{&MenuItemClass, {68, 54, 84, 233}, &(menuitem_t){"Set Screen size..."}},
+	{&MenuItemClass, {84, 54, 100, 233}, &(menuitem_t){"Speed Governor", GetSlowDown}},
+	{&MenuItemClass, {100, 54, 116, 233}, &(menuitem_t){"Mouse Control", GetMouseEnabled}},
+	{&MenuItemClass, {116, 54, 132, 233}, &(menuitem_t){"Pause", GetPaused}},
+	{&MenuItemClass, {132, 54, 148, 233}, &(menuitem_t){"Configure Keyboard"}},
+}, 8, {19, 53, 149, 234}, -1};
 static widget_t MenuBar[2] = {
-	{&MenuBarItemClass, {1, 12, 19, 53},&(menu_t) {"File", (widget_t[7]){
-			{&MenuItemClass, {20, 13, 36, 144}, &(menuitem_t){"New Game..."}},
-			{&MenuItemClass, {36, 13, 52, 144}, &(menuitem_t){"Open"}},
-			{&MenuSeparatorClass, {52, 13, 68, 144}},
-			{&MenuItemClass, {68, 13, 84, 144}, &(menuitem_t){"Save"}},
-			{&MenuItemClass, {84, 13, 100, 144}, &(menuitem_t){"Save As..."}},
-			{&MenuSeparatorClass, {100, 13, 116, 144}},
-			{&MenuItemClass, {116, 13, 132, 144}, &(menuitem_t){"Quit"}},
-		}, 7, {19, 12, 133, 145}, -1}},
-	{&MenuBarItemClass, {1, 53, 19, 120},&(menu_t) {"Options", (widget_t[8]){
-			{&MenuItemClass, {20, 54, 36, 233}, &(menuitem_t){"Full Screen", GetFullScreen}},
-			{&MenuItemClass, {36, 54, 52, 233}, &(menuitem_t){"Sound", GetSoundEnabled}},
-			{&MenuItemClass, {52, 54, 68, 233}, &(menuitem_t){"Music", GetMusicEnabled}},
-			{&MenuItemClass, {68, 54, 84, 233}, &(menuitem_t){"Set Screen size..."}},
-			{&MenuItemClass, {84, 54, 100, 233}, &(menuitem_t){"Speed Governor", GetSlowDown}},
-			{&MenuItemClass, {100, 54, 116, 233}, &(menuitem_t){"Mouse Control", GetMouseEnabled}},
-			{&MenuItemClass, {116, 54, 132, 233}, &(menuitem_t){"Pause", GetPaused}},
-			{&MenuItemClass, {132, 54, 148, 233}, &(menuitem_t){"Configure Keyboard"}},
-	}, 8, {19, 53, 149, 234}, -1}},
+	{&MenuBarItemClass, {1, 12, 19, 53},&FileMenu},
+	{&MenuBarItemClass, {1, 53, 19, 120},&OptionsMenu},
 };
 
 void DrawMainMenu(int SelectedMenu)
@@ -731,7 +758,6 @@ int DoMenuCommand(int Menu, int Item)
 		switch (Item) {
 		case 0:
 			if (ChooseGameDiff()) {		/* Choose level of difficulty */
-				SaveFileName = 0;		/* Zap the save game name */
 				return EX_NEWGAME;
 			}
 			return -2;
@@ -743,10 +769,11 @@ int DoMenuCommand(int Menu, int Item)
 			}
 			break;
 		case 3:
-			if (SaveFileName) {			/* Save the file automatically? */
+			if (!SaveFileName)			/* Save the file automatically? */
+				ChooseSaveGame();		/* Select a save game name */
+			if (SaveFileName)
 				SaveGame();				/* Save it */
-				break;
-			}
+			break;
 		case 4:
 			if (ChooseSaveGame()) {		/* Select a save game name */
 				SaveGame();				/* Save it */
@@ -915,6 +942,7 @@ TryIt:
 				SetAPalette(rGamePal);			/* Reset the game palette */
 				RedrawStatusBar();		/* Redraw the lower area */
 				RenderView();
+				InitVideoDialog();
 			}
 			SavePrefs();
 			return 1;
@@ -994,11 +1022,11 @@ static int RunKeyboardDialog(int Click)
 	if (Click == 3 || (joystick1 & JOYPAD_B))
 		return -1;
 	if (MenuPosY >= 12) {
-		if (joystick1 & JOYPAD_UP)
+		if (joystick1 & JOYPAD_LFT)
 			MenuScrollY = 0;
-		if ((joystick1 & JOYPAD_LFT) && MenuPosY == 13)
+		if ((joystick1 & JOYPAD_UP) && MenuPosY == 13)
 			MenuScrollY = 12;
-		if ((joystick1 & JOYPAD_RGT) && MenuPosY == 12)
+		if ((joystick1 & JOYPAD_DN) && MenuPosY == 12)
 			MenuScrollY = 13;
 	} else if (mousewheel) {
 		for (i = MenuScrollY; mousewheel; mousewheel -= (mousewheel > 0 ? 1 : -1)) {
@@ -1020,11 +1048,8 @@ static int RunKeyboardDialog(int Click)
 		} else {
 			i = ClickWidgets(KeyOkCancelButtons, 2, mousex, mousey, NULL);
 			if (i >= 0) {
-				MenuScrollY = i+12;
-				if (Click == 1) {
-					MenuPosY = i+12;
-					return -1;
-				}
+				MenuPosY = i+12;
+				return -1;
 			}
 		}
 	}
@@ -1058,7 +1083,7 @@ static void DrawKeyboardDialog(void)
 	RenderWidgets(KeyButtons, 12, MenuPosY, -1, NULL);
 	SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 	SDL_RenderRect(SdlRenderer,&FRect(&RectOff(&KeysFrameRect, X, Y)));
-	RenderWidgets(KeyOkCancelButtons, 2, 1, MenuPosY-12, NULL);
+	RenderWidgets(KeyOkCancelButtons, 2, -1, MenuPosY-12, NULL);
 }
 
 static int GetAKey(void)
@@ -1070,8 +1095,12 @@ static int GetAKey(void)
 
 	SDL_PumpEvents();
 	while (SDL_PollEvent(&event)) {
-		if (ProcessGlobalEvent(&event))
+		if (ProcessGlobalEvent(&event)) {
+			if (event.type == SDL_EVENT_WINDOW_RESIZED)
+				return SDL_MAX_SINT32;
 			continue;
+		}
+		SDL_ConvertEventToRenderCoordinates(SdlRenderer, &event);
 		if (event.type == SDL_EVENT_MOUSE_WHEEL) {
 			mousewheel += event.wheel.y;
 		} else if (event.type == SDL_EVENT_MOUSE_MOTION) {
@@ -1088,6 +1117,8 @@ static int GetAKey(void)
 	return 0;
 }
 
+#define MENUITEM(widget) ((menuitem_t*)(widget)->ptr)
+
 exit_t PauseMenu(Boolean Shape)
 {
 	Byte *ShapePtr = NULL;
@@ -1099,9 +1130,13 @@ exit_t PauseMenu(Boolean Shape)
 	Boolean Redraw;
 	Word OpenDialog = 0;
 	exit_t RetVal = EX_LIMBO;
+	Boolean Playing;
 
-	if(playstate == EX_STILLPLAYING || playstate == EX_AUTOMAP)
+	Playing = playstate == EX_STILLPLAYING || playstate == EX_AUTOMAP;
+	if (Playing)
 		PauseSoundMusicSystem();
+	MENUITEM(&FileMenu.entries[3])->disabled = !Playing;
+	MENUITEM(&FileMenu.entries[4])->disabled = !Playing;
 	UngrabMouse();
 	if (Shape) {
 		ShapePtr = LoadCompressedShape(rPauseShape);
@@ -1136,6 +1171,14 @@ exit_t PauseMenu(Boolean Shape)
 			}
 		} else {
 			Click = ReadMenuJoystick();
+		}
+		if (Click == SDL_MAX_SINT32) {
+			switch (OpenDialog) {
+				case 1: InitVideoDialog(); break;
+				case 2: InitKeyboardDialog(); break;
+				default: break;
+			}
+			Redraw = TRUE;
 		}
 		if (OpenDialog) {
 			switch (OpenDialog) {
@@ -1190,7 +1233,7 @@ exit_t PauseMenu(Boolean Shape)
 							i = Menu->n_entries - 1;
 						else if (i >= Menu->n_entries)
 							i = 0;
-					} while (Menu->entries[i].class_ == &MenuSeparatorClass);
+					} while (Menu->entries[i].class_ == &MenuSeparatorClass || MENUITEM(&Menu->entries[i])->disabled);
 				}
 				Menu->selected = i;
 				Redraw = TRUE;
@@ -1200,7 +1243,7 @@ exit_t PauseMenu(Boolean Shape)
 				Menu = MenuBar[SelectedMenu].ptr;
 				if (mousex != oldmousex || mousey != oldmousey || Click == 1) {
 					SelectedItem = ClickWidgets(Menu->entries, Menu->n_entries, mousex, mousey, NULL);
-					if (SelectedItem >= 0 && Menu->entries[SelectedItem].class_ != &MenuSeparatorClass) {
+					if (SelectedItem >= 0 && Menu->entries[SelectedItem].class_ != &MenuSeparatorClass && !MENUITEM(&Menu->entries[SelectedItem])->disabled) {
 						if (Menu->selected != SelectedItem) {
 							Redraw = TRUE;
 							Menu->selected = SelectedItem;

@@ -82,7 +82,6 @@ Word SlowDown = 1;			/* Force the game to 15 hz */
 Word MouseEnabled = 0;		/* Allow mouse control */
 Word GameViewSize = 3;		/* Size of the game screen */
 Word NoWeaponDraw=1;			/* Flag to not draw the weapon on the screen */
-LongWord ScenarioIndex=0;		/* Currently playing scenario */
 maplist_t *MapListPtr = NULL;		/* Pointer to map info record */
 short *SoundListPtr = NULL;	/* Pointer to sound list record */
 unsigned short *SongListPtr = NULL;	/* Pointer to song list record */

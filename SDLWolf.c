@@ -199,6 +199,7 @@ void BailOut(const char *Fmt, ...)
 	va_start(Args, Fmt);
 	vsnprintf(Buf, sizeof Buf, Fmt, Args);
 	fprintf(stderr, "%s\n", Buf);
+	UngrabMouse();
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal Error", Buf, SdlWindow);
 	va_end(Args);
 	Cleanup(1);
@@ -430,7 +431,8 @@ exit_t ReadSystemJoystick(void)
 			mousebuttons |= SDL_BUTTON_MASK(event.button.button);
 		} else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
 			mousebuttons &= ~SDL_BUTTON_MASK(event.button.button);
-		} else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_ESCAPE) {
+		} else if ((event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_ESCAPE)
+			|| event.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
 			PauseExited = TRUE;
 			return PauseMenu(TRUE);
 		} else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
@@ -606,6 +608,8 @@ int ReadMenuJoystick(void)
 				joystick1 |= JOYPAD_DN;
 			else if (joysticky <= -JOYDEADZONE && oldjoyy > JOYDEADZONE)
 				joystick1 |= JOYPAD_UP;
+			if (event.type == SDL_EVENT_WINDOW_RESIZED)
+				return SDL_MAX_SINT32;
 			continue;
 		}
 		SDL_ConvertEventToRenderCoordinates(SdlRenderer, &event);
@@ -926,14 +930,21 @@ void ShareWareEnd(void)
 
 Byte MachType[4] = "SDL3";
 
+#define WRITECHECKED(src, size) do { \
+		if (fwrite((src), 1, (size), FileRef) != (size)) \
+			goto Bogus; \
+	} while (0)
+
 void SaveGame(void)
 {
-	long Count;
+	char Err[1024];
 	uint32_t StrLen;
 	Word PWallWord;
 	FILE *FileRef;
 
 	if (!SaveFileName)
+		return;
+	if (playstate != EX_STILLPLAYING && playstate != EX_AUTOMAP)
 		return;
 	FileRef = fopen(SaveFileName, "wb");
 	if (!FileRef) {
@@ -941,67 +952,51 @@ void SaveGame(void)
 		return;
 	}
 
-	Count = 4;							/* Default length */
-	fwrite(&MachType, 1, Count, FileRef);	/* Save a machine type ID */
+	WRITECHECKED(&MachType, 4);							/* Save a machine type ID */
 	StrLen = strlen(ScenarioPath);
-	Count = 4;
-	fwrite(&StrLen, 1, Count, FileRef);	/* Save scenario path len */
-	Count = StrLen;
-	fwrite(ScenarioPath, 1, Count, FileRef);	/* Save full path to scenario file */
-	Count = sizeof(gamestate);
-	fwrite(&gamestate, 1, Count, FileRef);		/* Save the game stats */
-	Count = sizeof(PushWallRec);
-	fwrite(&PushWallRec, 1, Count, FileRef);	/* Save the pushwall stats */
+	WRITECHECKED(&StrLen, 4);	/* Save scenario path len */
+	WRITECHECKED(ScenarioPath, StrLen);	/* Save full path to scenario file */
+	WRITECHECKED(&gamestate, sizeof(gamestate));		/* Save the game stats */
+	WRITECHECKED(&PushWallRec, sizeof(PushWallRec));	/* Save the pushwall stats */
 
-	Count = sizeof(nummissiles);
-	fwrite(&nummissiles, 1, Count, FileRef);	/* Save missiles in motion */
-	if (nummissiles) {
-		Count = nummissiles*sizeof(missile_t);
-		fwrite(&missiles[0], 1, Count, FileRef);
-	}
-	Count = sizeof(numactors);
-	fwrite(&numactors, 1, Count, FileRef);		/* Save actors */
-	if (numactors) {
-		Count = numactors*sizeof(actor_t);
-		fwrite(&actors[0], 1, Count, FileRef);
-	}
-	Count = sizeof(numdoors);
-	fwrite(&numdoors, 1, Count, FileRef);		/* Save doors */
-	if (numdoors) {
-		Count = numdoors*sizeof(door_t);
-		fwrite(&doors[0], 1, Count, FileRef);
-	}
-	Count = sizeof(numstatics);
-	fwrite(&numstatics, 1, Count, FileRef);
-	if (numstatics) {
-		Count = numstatics*sizeof(static_t);
-		fwrite(&statics[0], 1, Count, FileRef);
-	}
-	Count = 64*64;
-	fwrite(MapPtr, 1, Count, FileRef);
-	Count = sizeof(tilemap);				/* Tile map */
-	fwrite(&tilemap, 1, Count, FileRef);
+	WRITECHECKED(&nummissiles, sizeof(nummissiles));	/* Save missiles in motion */
+	if (nummissiles)
+		WRITECHECKED(&missiles[0], nummissiles*sizeof(missile_t));
 
-	Count = sizeof(ConnectCount);
-	fwrite(&ConnectCount, 1, Count, FileRef);
-	if (ConnectCount) {
-		Count = ConnectCount * sizeof(connect_t);
-		fwrite(&areaconnect[0], 1, Count, FileRef);
-	}
-	Count = sizeof(areabyplayer);
-	fwrite(&areabyplayer[0], 1, Count, FileRef);
-	Count = (128+5)*64;
-	fwrite(&textures[0], 1, Count, FileRef);
-	Count = sizeof(Word);
+	WRITECHECKED(&numactors, sizeof(numactors));		/* Save actors */
+	if (numactors)
+		WRITECHECKED(&actors[0], numactors*sizeof(actor_t));
+
+	WRITECHECKED(&numdoors, sizeof(numdoors));		/* Save doors */
+	if (numdoors)
+		WRITECHECKED(&doors[0], numdoors*sizeof(door_t));
+
+	WRITECHECKED(&numstatics, sizeof(numstatics));
+	if (numstatics)
+		WRITECHECKED(&statics[0], numstatics*sizeof(static_t));
+
+	WRITECHECKED(MapPtr, 64*64);
+	WRITECHECKED(&tilemap, sizeof(tilemap));				/* Tile map */
+
+	WRITECHECKED(&ConnectCount, sizeof(ConnectCount));
+	if (ConnectCount)
+		WRITECHECKED(&areaconnect[0], ConnectCount * sizeof(connect_t));
+	WRITECHECKED(&areabyplayer[0], sizeof(areabyplayer));
+	WRITECHECKED(&textures[0], (128+5)*64);
 	PWallWord = 0;		/* Assume no pushwall pointer in progress */
 	if (pwallseg) {
 		PWallWord = (pwallseg-(saveseg_t*)nodes)+1;		/* Convert to number offset */
 	}
-	fwrite(&PWallWord, 1, Count, FileRef);
-	Count = MapPtr->numnodes*sizeof(savenode_t);	/* How large is the BSP tree? */
-	fwrite(nodes, 1, Count, FileRef);			/* Save it to disk */
+	WRITECHECKED(&PWallWord, sizeof PWallWord);
+	WRITECHECKED(nodes, MapPtr->numnodes*sizeof(savenode_t));	/* Save BSP tree */
 	fclose(FileRef);						/* Close the file */
 	PlaySound(SND_BONUS);
+	return;
+Bogus:
+	fclose(FileRef);						/* Close the file */
+	SDL_RemovePath(SaveFileName);
+	snprintf(Err, sizeof Err, "Failed to write save file: %s", SaveFileName);
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", Err, SdlWindow);
 }
 
 /**********************************
@@ -1014,14 +1009,16 @@ void *SaveRecordMem;
 LongWord SaveRecordSize;
 
 #define CHECKSPACE(n) do { \
-	if (FilePtr.B - TheMem + (n) < FileSize) \
+	if (FileSize < FilePtr.B - TheMem + (n)) \
 		goto Bogus; \
 	} while (0)
 
 Boolean LoadGame(void)
 {
+	char Err[1024];
 	LongWord FileSize;
 	LongWord PathLen;
+	char *Path = NULL;
 	union {
 		Byte *B;
 		u_uint16_t *S;
@@ -1033,49 +1030,55 @@ Boolean LoadGame(void)
 
 	if (!SaveFileName)
 		return FALSE;
-	FileRef = fopen(SaveFileName, "wb");
+	FileRef = fopen(SaveFileName, "rb");
 	if (!FileRef)
 		return FALSE;
 	if (fseek(FileRef, 0, SEEK_END))
 		goto BadFile;
 	FileSize = ftell(FileRef);
-	if ((int)FileSize <= 8)
+	if ((int)FileSize < 0)
 		goto BadFile;
 	if (fseek(FileRef, 0, SEEK_SET))
 		goto BadFile;
 	FilePtr.B = TheMem = AllocSomeMem(FileSize);	/* Get memory for the file */
-	if (!FilePtr.B) {						/* No memory! */
-		return FALSE;
-	}
+	if (FileSize <= 8)
+		goto Bogus;
 	if (fread(FilePtr.B, 1, FileSize, FileRef) != FileSize)	/* Open the file */
 		goto Bogus;
 	fclose(FileRef);						/* Close the file */
-	if (memcmp(MachType,FilePtr.B,4)) {		/* Is this the proper machine type? */
+	if (memcmp(MachType,FilePtr.B,4))		/* Is this the proper machine type? */
 		goto Bogus;
-	}
 	FilePtr.B+=4;							/* Index past signature */
 	PathLen = *FilePtr.L;
 	FilePtr.B+=4;							/* Index past length */
 	CHECKSPACE(PathLen);
-	if (ScenarioPath)
-		FreeSomeMem(ScenarioPath);
-	ScenarioPath = AllocSomeMem(PathLen+1);
-	memcpy(ScenarioPath, FilePtr.B, PathLen);
-	ScenarioPath[PathLen] = '\0';
-	MountMapFile(ScenarioPath);
-	LoadMapSetData();
+	Path = AllocSomeMem(PathLen+1);
+	memcpy(Path, FilePtr.B, PathLen);
+	Path[PathLen] = '\0';
+	FilePtr.B+=PathLen;
 	CHECKSPACE(sizeof(gamestate));
+	MountMapFile(Path);
+	LoadMapSetData();
 	memcpy(&gamestate,FilePtr.B,sizeof(gamestate));	/* Reset the game state */
 	SaveRecord = FilePtr.B;
 	SaveRecordMem = TheMem;
 	SaveRecordSize = FileSize;
+	if (ScenarioPath)
+		FreeSomeMem(ScenarioPath);
+	ScenarioPath = Path;
 	return TRUE;
 
 Bogus:
+	if (Path)
+		FreeSomeMem(Path);
 	FreeSomeMem(TheMem);
+	snprintf(Err, sizeof Err, "Save file is corrupted: %s", SaveFileName);
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", Err, SdlWindow);
+	return FALSE;
 BadFile:
 	fclose(FileRef);
-	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", "Failed to load game", SdlWindow);
+	snprintf(Err, sizeof Err, "Failed to read save file: %s", SaveFileName);
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", Err, SdlWindow);
 	return FALSE;
 }
 
@@ -1124,12 +1127,11 @@ void FinishLoadGame(void)
 	COPYCHECKED(tilemap,sizeof tilemap);						/* Tile map */
 
 	COPYCHECKED(&ConnectCount,sizeof ConnectCount);		/* Number of valid interconnects */
-	FilePtr.W++;
 	if (ConnectCount)
 		COPYCHECKED(areaconnect,sizeof(connect_t)*ConnectCount);	/* Is this area mated with another? */
 	COPYCHECKED(areabyplayer,sizeof(areabyplayer));	/* Which areas can I see into? */
 
-	COPYCHECKED(textures,sizeof textures);;				/* Texture array for pushwalls */
+	COPYCHECKED(textures,sizeof textures);				/* Texture array for pushwalls */
 
 	pwallseg = 0;			/* Assume bogus */
 	COPYCHECKED(&Tmp,sizeof Tmp);				/* Texture array for pushwalls */
@@ -1142,7 +1144,7 @@ void FinishLoadGame(void)
 	FreeSomeMem(SaveRecordMem);
 	return;
 Bogus:
-	BailOut("Save file corrupted: %s", SaveFileName);
+	BailOut("Save file is corrupted: %s", SaveFileName);
 }
 
 #undef COPYCHECKED
@@ -1155,31 +1157,65 @@ Bogus:
 
 **********************************/
 
-static SDL_Mutex *DialogMutex = NULL;
-static Boolean DialogCancel = FALSE;
+static SDL_AtomicInt DialogStatus;
+
+#ifdef SDL_PLATFORM_WINDOWS
+#define PATH_SEP '\\'
+#else
+#define PATH_SEP '/'
+#endif
+
+static char *SetupFileDialog(void)
+{
+	const char *Dir;
+
+	SDL_SetAtomicInt(&DialogStatus, -1);
+	if (SaveFileName) {
+		Dir = SDL_strrchr(SaveFileName, PATH_SEP);
+		if (Dir)
+			return SDL_strndup(SaveFileName, Dir - SaveFileName);
+	}
+	return NULL;
+}
+
+static Boolean WaitDialog(void)
+{
+	SDL_Event Event;
+	int Status;
+
+	for (;;) {
+		SDL_WaitEvent(&Event);
+		ProcessGlobalEvent(&Event);
+		Status = SDL_GetAtomicInt(&DialogStatus);
+		if (Status >= 0)
+			break;
+	}
+	return Status;
+}
 
 static void SaveFileChosen(void *userdata, const char * const *filelist, int filter)
 {
+	SDL_Event Event;
+
 	if (!filelist || !*filelist) {
-		DialogCancel = TRUE;
+		SDL_SetAtomicInt(&DialogStatus, 0);
 	} else {
-		DialogCancel = FALSE;
+		SDL_SetAtomicInt(&DialogStatus, 1);
 		if (SaveFileName)
 			SDL_free(SaveFileName);
 		SaveFileName = SDL_strdup(*filelist);
+		if (!SaveFileName) BailOut("Out of memory");
 	}
-	SDL_UnlockMutex(DialogMutex);
+	Event.type = SDL_EVENT_USER;
+	SDL_PushEvent(&Event);
 }
 
 Boolean ChooseLoadGame(void)
 {
-	if (!DialogMutex)
-		DialogMutex = SDL_CreateMutex();
-	SDL_LockMutex(DialogMutex);
-	SDL_ShowOpenFileDialog(SaveFileChosen, NULL, SdlWindow, NULL, 0, NULL, FALSE);
-	SDL_LockMutex(DialogMutex);
-	SDL_UnlockMutex(DialogMutex);
-	return DialogCancel;
+	char *Dir = SetupFileDialog();
+	SDL_ShowOpenFileDialog(SaveFileChosen, NULL, SdlWindow, NULL, 0, Dir, FALSE);
+	if (Dir) SDL_free(Dir);
+	return WaitDialog();
 }
 
 /**********************************
@@ -1191,13 +1227,15 @@ Boolean ChooseLoadGame(void)
 
 Boolean ChooseSaveGame(void)
 {
-	if (!DialogMutex)
-		DialogMutex = SDL_CreateMutex();
-	SDL_LockMutex(DialogMutex);
+
+	char *Dir;
+
+	if (playstate != EX_STILLPLAYING && playstate != EX_AUTOMAP)
+		return FALSE;
+	Dir = SetupFileDialog();
 	SDL_ShowSaveFileDialog(SaveFileChosen, NULL, SdlWindow, NULL, 0, NULL);
-	SDL_LockMutex(DialogMutex);
-	SDL_UnlockMutex(DialogMutex);
-	return DialogCancel;
+	if (Dir) SDL_free(Dir);
+	return WaitDialog();
 }
 
 static Boolean StrToBool(const char *value)

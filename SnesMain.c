@@ -249,8 +249,7 @@ int main()
 			BlastScreen();
 			SetAPalette(rBlackPal);
 		}
-		if (playstate == EX_NEWGAME || ChooseGameDiff()) {	/* Choose your difficulty */
-			playstate = EX_NEWGAME;	/* Start a new game */
+		if (playstate == EX_NEWGAME || playstate == EX_LOADGAME || ChooseGameDiff()) {	/* Choose your difficulty */
 			do {
 				//FadeToBlack();		/* Fade the screen */
 				StartGame();		/* Play the game */

@@ -879,7 +879,6 @@ extern Word MacVidSize;		/* Current 0 = 320, 1 = 512, 2 = 640 */
 extern Word SlowDown;		/* If true, then limit game to 30hz */
 extern Word MouseEnabled;	/* Allow mouse control */
 extern Word GameViewSize;	/* Size of the game screen */
-extern LongWord ScenarioIndex;	/* Currently playing scenario */
 extern Boolean IntermissionHack;	/* Hack for preventing double score drawing during intermission */
 extern Boolean PauseExited;	/* Flag for rerendering when exiting pause */
 extern Word NoWeaponDraw;		/* Flag to not draw the weapon on the screen */
