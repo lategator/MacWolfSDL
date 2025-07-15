@@ -493,7 +493,16 @@ Word TestMBShape(Word x,Word y,void *ShapePtr,void *BackPtr)
 
 void ShowPic(Word PicNum)
 {
-	DrawShape(0,0,LoadAResource(PicNum));	/* Load the resource and show it */
+	LongWord Length = ResourceLength(PicNum);
+	Word *ShapePtr;
+	if (Length < 4)
+		return;
+	ShapePtr = LoadAResource(PicNum);
+	if (!ShapePtr)
+		return;
+	if (Length < 4 + SwapUShortBE(ShapePtr[0]) * SwapUShortBE(ShapePtr[1]))
+		return;
+	DrawShape(0,0,ShapePtr);	/* Load the resource and show it */
 	ReleaseAResource(PicNum);			/* Release it */
 	BlastScreen();
 }
@@ -675,6 +684,8 @@ void DrawAChar(Word Letter)
 
 void SetAPalette(Word PalNum)
 {
+	if (ResourceLength(PalNum) < 768)
+		return;
 	SetAPalettePtr(LoadAResource(PalNum));		/* Set the current palette */
 	ReleaseAResource(PalNum);					/* Release the resource */
 }
@@ -702,6 +713,8 @@ void FadeToBlack(void)
 
 void FadeTo(Word RezNum)
 {
+	if (ResourceLength(RezNum) < 768)
+		return;
 	FadeToPtr(LoadAResource(RezNum));
 	ReleaseAResource(RezNum);
 }
@@ -722,6 +735,8 @@ void FadeToPtr(unsigned char *PalPtr)
 	Word Count;
 	Word i;
 
+	if (!PalPtr)
+		return;
 	if (!memcmp(PalPtr,&CurrentPal,768)) {	/* Same palette? */
 		return;
 	}
@@ -746,11 +761,6 @@ void FadeToPtr(unsigned char *PalPtr)
 		BlastScreen();
 		WaitTicks(1);
 	} while (++Count<17);
-}
-
-void KillAResource(Word RezNum)
-{
-	ReleaseAResource(RezNum);
 }
 
 /*

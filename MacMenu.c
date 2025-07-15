@@ -1,3 +1,4 @@
+#include "Burger.h"
 #include "WolfDef.h"
 #include "SDLWolf.h"
 #include <string.h>
@@ -31,13 +32,14 @@ static LongWord MenuScrollY = 0;
 static LongWord ScenarioCount = 0;
 static SDL_Surface *MenuBG = NULL;
 static scenario_t *Scenarios = NULL;
-static char *ScenarioPath = NULL;
+char *ScenarioPath = NULL;
 int SelectedMenu = -1;
 
 extern char *SaveFileName;
 
 #define RectShrink(r,o) ((Rect){(r)->top+(o), (r)->left+(o), (r)->bottom-(o), (r)->right-(o)})
 #define RectOff(r,x,y) ((Rect){(r)->top+(y), (r)->left+(x), (r)->bottom+(y), (r)->right+(x)})
+#define RectMod(R,l,t,r,b) ((Rect){(R)->top+(t), (R)->left+(l), (R)->bottom+(b), (R)->right+(r)})
 #define FRect(r) ((SDL_FRect){(r)->left, (r)->top, (r)->right - (r)->left, (r)->bottom - (r)->top})
 #define FRectShrink(r,o) ((SDL_FRect){(r)->left+(o), (r)->top+(o), (r)->right - (r)->left-(o)*2, (r)->bottom - (r)->top-(o)*2})
 
@@ -366,12 +368,14 @@ static void DrawScenarioList(void)
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 		SDL_RenderFillRect(SdlRenderer, &(SDL_FRect){231, 17, 96, 64});
 	}
-	FontSetColor(BLACK);
+	DrawFilledFrame(&RectMod(&ScenarioListRect,0,0,16,0));
 	if (!MenuBG) {
+		FontSetColor(WHITE2);
 		SetFontXY(48, 39);
 		FontSetClip(NULL);
 		DrawAString("Which scenario?");
 	}
+	FontSetColor(BLACK);
 	FontSetClip(&ScenarioListRect);
 	Y = ScenarioListRect.top;
 	Max = MenuScrollY + ScenariosItemHeight;
@@ -860,7 +864,7 @@ static void InitKeyboardDialog(void)
 	Y = (SCREENHEIGHT-KeyboardDialogRect.bottom)/2;
 
 	MenuScrollY = MenuPosY = 0;
-	for (i = 0; i < 12; i++) {
+	for (i = 0; i < ARRAYLEN(KeyBinds); i++) {
 		KeyButtons[i] = (widget_t) {&TextEntryClass, RectOff(&KeyButtonRect, X, Y+i*16),
 			(void*)SDL_GetScancodeName(KeyBinds[KeyIndexes[i]])};
 		TmpKeyBinds[i] = KeyBinds[KeyIndexes[i]];
@@ -971,9 +975,7 @@ static int GetAKey(void)
 
 exit_t PauseMenu(Boolean Shape)
 {
-	LongWord *PackPtr;
 	Byte *ShapePtr = NULL;
-	LongWord PackLength;
 	int Click = 0;
 	int oldmousex, oldmousey;
 	int SelectedItem;
@@ -987,13 +989,11 @@ exit_t PauseMenu(Boolean Shape)
 		PauseSoundMusicSystem();
 	UngrabMouse();
 	if (Shape) {
-		PackPtr = LoadAResource(rPauseShape);
-		PackLength = SwapLongBE(PackPtr[0]);
-		ShapePtr = AllocSomeMem(PackLength);
-		DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLength);
-		DrawShape((SCREENWIDTH-224)/2, (MacViewHeight-56)/2, ShapePtr);
-		ReleaseAResource(rPauseShape);
-		BlitScreen();
+		ShapePtr = LoadCompressedShape(rPauseShape);
+		if (ShapePtr) {
+			DrawShape((SCREENWIDTH-224)/2, (MacViewHeight-56)/2, ShapePtr);
+			BlitScreen();
+		}
 	}
 	StartUIOverlay();
 	DrawMainMenu(SelectedMenu);
@@ -1034,7 +1034,7 @@ exit_t PauseMenu(Boolean Shape)
 					BlitScreen();
 				}
 				if (OpenDialog == 2 && MenuPosY == 13) {
-					for (i = 0; i < 12; i++)
+					for (i = 0; i < ARRAYLEN(KeyBinds); i++)
 						KeyBinds[KeyIndexes[i]] = TmpKeyBinds[i];
 					SavePrefs();
 				}

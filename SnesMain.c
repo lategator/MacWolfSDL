@@ -24,34 +24,43 @@ void LoadMapSetData(void)
 		Length = ResourceLength(MySoundList)>>1;
 		for (i = 0; i < Length; i++)
 			Sounds[i] = SwapShortBE(Sounds[i]);
-		RegisterSounds(Sounds);
+		RegisterSounds(Sounds, Length);
 		SoundListPtr = Sounds;
 	}
 	if (Maps != MapListPtr) {
-		if (Maps) {
+		Length = ResourceLength(rMapList);
+		if (Length < sizeof *Maps) {
+			Maps = NULL;
+		} else if (Maps) {
 			Maps->MaxMap = SwapUShortBE(Maps->MaxMap);
 			Maps->MapRezNum = SwapUShortBE(Maps->MapRezNum);
-			for (int i = 0; i < Maps->MaxMap; i++) {
-				MapInfo_t *Info = &Maps->InfoArray[i];
-				Info->NextLevel = SwapUShortBE(Info->NextLevel);
-				Info->SecretLevel = SwapUShortBE(Info->SecretLevel);
-				Info->ParTime = SwapUShortBE(Info->ParTime);
-				Info->ScenarioNum = SwapUShortBE(Info->ScenarioNum);
-				Info->FloorNum = SwapUShortBE(Info->FloorNum);
+			if (Length < sizeof *Maps + sizeof *Maps->InfoArray * Maps->MaxMap) {
+				Maps = NULL;
+			} else {
+				for (int i = 0; i < Maps->MaxMap; i++) {
+					MapInfo_t *Info = &Maps->InfoArray[i];
+					Info->NextLevel = SwapUShortBE(Info->NextLevel);
+					Info->SecretLevel = SwapUShortBE(Info->SecretLevel);
+					Info->ParTime = SwapUShortBE(Info->ParTime);
+					Info->ScenarioNum = SwapUShortBE(Info->ScenarioNum);
+					Info->FloorNum = SwapUShortBE(Info->FloorNum);
+				}
 			}
 		}
 		MapListPtr = Maps;
 	}
 	if (Songs != SongListPtr) {
-		Length = ResourceLength(rSongList)>>1;
+		SongListLen = Length = ResourceLength(rSongList)>>1;
 		for (i = 0; i < Length; i++)
 			Songs[i] = SwapUShortBE(Songs[i]);
 		SongListPtr = Songs;
 	}
 	if (Walls != WallListPtr) {
-		Length = ResourceLength(MyWallList)>>1;
-		for (i = 0; i < Length; i++)
-			Walls[i] = SwapUShortBE(Walls[i]);
+		WallListLen = Length = ResourceLength(MyWallList)>>1;
+		for (i = 0; i < Length && i < ARRAYLEN(WallList); i++)
+			WallList[i] = Walls[i] = SwapUShortBE(Walls[i]);
+		for (; i < ARRAYLEN(WallList); i++)
+			WallList[i] = 0;
 		WallListPtr = Walls;
 	}
 }
@@ -179,8 +188,6 @@ void StartGame(void)
 
 void TitleScreen (void)
 {
-	LongWord PackLen;
-	LongWord *PackPtr;
 	Byte *ShapePtr;
 	exit_t PSTmp;
 	exit_t PS = EX_COMPLETED;
@@ -189,14 +196,12 @@ void TitleScreen (void)
 	playstate = EX_LIMBO;	/* Game is not in progress */
 	NewGameWindow(1);	/* Set to 512 mode */
 	FadeToBlack();		/* Fade out the video */
-	PackPtr = LoadAResource(rTitlePic);
-	PackLen = SwapLongBE(PackPtr[0]);
-	ShapePtr = (Byte *)AllocSomeMem(PackLen);
-	DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLen);
-	DrawShape(0,0,ShapePtr);
-	ReleaseAResource(rTitlePic);
-	BlastScreen();
-	StartSong(SongListPtr[0]);
+	ShapePtr = LoadCompressedShape(rTitlePic);
+	if (ShapePtr) {
+		DrawShape(0,0,ShapePtr);
+		BlastScreen();
+	}
+	StartSong(0);
 	FadeTo(rTitlePal);	/* Fade in the picture */
 	BlastScreen();
 	for (;;) {
@@ -239,7 +244,7 @@ int main()
 			do {
 				TitleScreen();		/* Show the game logo */
 			} while (!playstate);
-			StartSong(SongListPtr[0]);
+			StartSong(0);
 			ClearTheScreen(BLACK);	/* Blank out the title page */
 			BlastScreen();
 			SetAPalette(rBlackPal);

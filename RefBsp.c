@@ -30,7 +30,7 @@ void RenderWallLoop(Word x1,Word x2,Word distance)
 		while (x1 < x2) {		/* Time to draw? */
 			scaler = rw_scale >> FRACBITS;		/* Get the draw scale */
 			xscale[x1] = scaler;		/* Save the scale factor */
-			angle = xtoviewangle[x1]+rw_centerangle;
+			angle = (xtoviewangle[x1]+rw_centerangle)%(FINEANGLES/2);
 			texturecolumn = rw_midpoint - SUFixedMul(finetangent[angle],distance);	/* Which texture to use? */
 			if ((Word)texturecolumn < rw_mintex) {
 				texturecolumn = rw_mintex;
@@ -47,7 +47,7 @@ void RenderWallLoop(Word x1,Word x2,Word distance)
 	while (x1 < x2) {		/* Time to draw? */
 		scaler = rw_scale >> FRACBITS;		/* Get the draw scale */
 		xscale[x1] = scaler;		/* Save the scale factor */
-		angle = xtoviewangle[x1]+rw_centerangle;
+		angle = (xtoviewangle[x1]+rw_centerangle)%(FINEANGLES/2);
 		texturecolumn = SUFixedMul(finetangent[angle],distance)+rw_midpoint;	/* Which texture to use? */
 		if ((Word)texturecolumn < rw_mintex) {
 			texturecolumn = rw_mintex;
@@ -55,7 +55,7 @@ void RenderWallLoop(Word x1,Word x2,Word distance)
 			texturecolumn = rw_maxtex-1;
 		}
 		tile = rw_texture[texturecolumn>>8];	/* Get the tile to use */
-		if (!(WallListPtr[tile+1] & 0x4000)) {
+		if (!(WallList[tile+1] & 0x4000)) {
 			texturecolumn^=0xff;	/* Reverse the tile for N,W walls */
 		}
 		IO_ScaleWallColumn(x1,scaler,tile,(texturecolumn>>1)&127);	/* Draw the line */
@@ -120,7 +120,7 @@ typedef	struct {
 	Word top, bottom;
 } screenpost_t;
 
-#define	MAXSEGS	16
+#define	MAXSEGS	256
 
 screenpost_t solidsegs[MAXSEGS], *newend;	/* newend is one past the last valid seg */
 
@@ -137,6 +137,8 @@ void ClipWallSegment(Word top,Word bottom,saveseg_t *seg,Word distance)
 	if (top > start->top) {
 		if (bottom > start->top+1) {	/* post is entirely visible (above start), so insert a new clippost*/
 			RenderWallRange(top, bottom,seg,distance);
+			if (newend >= solidsegs + MAXSEGS)
+				return;
 			next = newend;
 			newend++;
 			while (next != start) {
@@ -236,6 +238,8 @@ void P_DrawSeg (saveseg_t *seg)
 
 	if (seg->texture >= 129) {	/* segment is a door */
 		door = seg->texture - 129;	/* Which door is this? */
+		if (door >= numdoors)
+			return;
 		door_p = &doors[door];
 		rw_texture = &textures[129 + (door_p->info>>1)][0];
 		texslide = door_p->position;

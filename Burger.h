@@ -48,7 +48,9 @@ extern Word VideoWidth;
 extern LongWord LastTick;
 extern LongWord YTable[480];
 
-void DLZSS(Byte *restrict Dest,const Byte *restrict Src,LongWord Length);
+void DLZSS(Byte *restrict Dest,LongWord DstLen,const Byte *restrict Src,LongWord SrcLen);
+
+#define ARRAYLEN(a) (sizeof((a)) / sizeof((a)[0]))
 
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define SwapLongLE(__x) __builtin_bswap32(__x)
@@ -108,11 +110,13 @@ void FadeTo(Word PalNum);
 void FadeToBlack(void);
 void FadeToPtr(unsigned char *PalPtr);
 
-void RegisterSounds(short *SoundIDs);
+void RegisterSounds(short *SoundIDs, LongWord Len);
 void InitResources(void);
 void KillResources(void);
 Boolean MountMapFileAbsolute(const char *FileName);
 Boolean MountMapFile(const char *FileName);
+void *LoadCompressed(Word RezNum, LongWord *Length);
+void *LoadCompressedShape(Word RezNum);
 void *LoadAResource(Word RezNum);
 LongWord ResourceLength(Word RezNum);
 void ReleaseAResource(Word RezNum);

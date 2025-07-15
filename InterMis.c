@@ -5,8 +5,8 @@
 extern Word NumberIndex;	/* Hack for drawing numbers */
 static LongWord BJTime;	/* Time to draw BJ? */
 static Word WhichBJ;	/* Which BJ to show */
-static LongWord Indexs[3];		/* Offsets to BJ's true shapes */
-static Byte *BJPtr;			/* Pointer to BJ's shapes */
+static Word *BJPtrs[3];		/* Pointers to BJ's true shapes */
+static LongWord *BJIndexPtr;			/* Pointer to indexes of BJ's shapes */
 static Word ParTime;		/* Par time for level */
 static LongWord BonusScore;	/* Additional points */
 
@@ -32,12 +32,16 @@ static LongWord BonusScore;	/* Additional points */
 static Rect BJRect = {48,73,48+142,73+131};	/* Rect for BJ's picture */
 static void ShowBJ(void)
 {
+	if (!BJIndexPtr)
+		return;
 	if ((ReadTick()-BJTime) >= 20) {		/* Time to draw a BJ? */
 		BJTime = ReadTick();				/* Set the new time */
 		if (WhichBJ!=2) {			/* Thumbs up? */
 			WhichBJ ^= 1;			/* Nope, toggle breathing */
 		}
-		DrawShape(73,48,&BJPtr[Indexs[WhichBJ]]);		/* Draw BJ */
+		if (!BJPtrs[WhichBJ])
+			return;
+		DrawShape(73,48,BJPtrs[WhichBJ]);		/* Draw BJ */
 		BlastScreen2(&BJRect);				/* Update video */
 	}
 }
@@ -211,10 +215,10 @@ static void RollRatio(Word x,Word y,Word ratio)
 
 void LevelCompleted (void)
 {
-	Word k;
-	LongWord *PackPtr;
-	Byte *ShapePtr;
-	LongWord PackLength;
+	Word i, k;
+	Word *ShapePtr;
+	LongWord UnpackLength;
+	LongWord Index;
 
 /* setup */
 
@@ -225,27 +229,34 @@ void LevelCompleted (void)
 	NumberIndex = 47;		/* Hack to draw score using an alternate number set */
 	UngrabMouse();
 	NewGameWindow(1);		/* Force 512 mode screen */
-	PackPtr = LoadAResource(rIntermission);
-	PackLength = SwapLongBE(PackPtr[0]);
-	ShapePtr = (Byte *) AllocSomeMem(PackLength);
-	DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLength);
-	DrawShape(0,0,ShapePtr);
-	FreeSomeMem(ShapePtr);
-	ReleaseAResource(rIntermission);
-	PackPtr = LoadAResource(rInterPics);
-	PackLength = SwapLongBE(PackPtr[0]);
-	BJPtr = (Byte *)AllocSomeMem(PackLength);
-	DLZSS(BJPtr,(Byte *) &PackPtr[1],PackLength);
-	ReleaseAResource(rInterPics);
-	memcpy(Indexs,BJPtr,sizeof Indexs);		/* Copy the index table */
-	for (int i = 0; i < 3; i++)
-		Indexs[i] = SwapLongBE(Indexs[i]);
+	ShapePtr = LoadCompressedShape(rIntermission);
+	if (ShapePtr) {
+		DrawShape(0,0,ShapePtr);
+		FreeSomeMem(ShapePtr);
+	}
+	BJIndexPtr = LoadCompressed(rInterPics, &UnpackLength);
+	if (BJIndexPtr) {
+		if (UnpackLength < sizeof(LongWord)*3) {
+			FreeSomeMem(BJIndexPtr);
+			BJIndexPtr = NULL;
+		} else {
+			for (i = 0; i < 3; i++) {
+				BJPtrs[i] = NULL;
+				Index = SwapLongBE(BJIndexPtr[i]);
+				if (UnpackLength >= Index + 4) {
+					ShapePtr = (void*)(((Byte*)BJIndexPtr) + Index);
+					if (UnpackLength >= Index + 4 + SwapUShortBE(ShapePtr[0]) * SwapUShortBE(ShapePtr[1]))
+						BJPtrs[i] = ShapePtr;
+				}
+			}
+		}
+	}
 
 	WhichBJ = 0;		/* Init BJ */
 	BJTime = ReadTick()-50;		/* Force a redraw */
 	BlastScreen();		/* Draw the screen */
 	ShowBJ();			/* Draw BJ */
-	StartSong(SongListPtr[1]);	/* Play the intermission song */
+	StartSong(1);	/* Play the intermission song */
 	SetAPalette(rInterPal);	/* Set the palette */
 	DrawIScore();			/* Draw the current score */
 
@@ -298,7 +309,8 @@ void LevelCompleted (void)
 	do {
 		ShowBJ();		/* Animate BJ */
 	} while (!WaitTicksEvent(1));		/* Wait for a keypress */
-	FreeSomeMem(BJPtr);		/* Release BJ's shapes */
+	if (BJIndexPtr)
+		FreeSomeMem(BJIndexPtr);		/* Release BJ's shapes */
 	FadeToBlack();		/* Fade away */
 	IntermissionHack = FALSE;		/* Release the hack */
 	NumberIndex = 36;			/* Restore the index */

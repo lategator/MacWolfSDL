@@ -9,6 +9,7 @@ typedef uint16_t __attribute__((aligned(1), may_alias)) u_uint16_t;
 extern SDL_Renderer *SdlRenderer;
 extern RFILE *MainResources;
 extern SDL_Keycode KeyBinds[12];
+extern char *ScenarioPath;
 
 extern const char *PrefPath(void);
 extern SDL_Storage *PrefStorage(void);

@@ -412,6 +412,9 @@ void StartPushWall(void)
 		segplane = (PushWallRec.pwallx+1)<<1;
 		segmin = PushWallRec.pwally<<1;
 		segdir = di_north;	/* Point north */
+		break;
+	default:
+		__builtin_unreachable();
 	}
 
 	SavePtr = (saveseg_t *)nodes;	/* Init pointer to the nodes */

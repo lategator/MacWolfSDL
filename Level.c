@@ -153,9 +153,9 @@ S_TRANS_DTH1,
 S_TRANS_DTH2,
 S_TRANS_DTH3,S_G_KEY,0};
 
-static Byte EnemyHits[16];
+static Byte EnemyHits[12];
 
-static Word *EnemySprs[] = {	/* This list MUST match class_t! */
+static const Word *EnemySprs[] = {	/* This list MUST match class_t! */
 NaziSprs,
 OfficerSprs,
 SSSprs,
@@ -173,7 +173,7 @@ HitlerSprs
 
 static Byte WallHits[256];
 
-Word staticflags[] = {
+static const Word staticflags[] = {
 0,					/*S_WATER_PUDDLE,*/
 TI_BLOCKMOVE,		/*S_GREEN_BARREL,*/
 TI_BLOCKMOVE,		/*S_CHAIR_TABLE,*/
@@ -226,7 +226,7 @@ void SpawnStatic(Word x,Word y,Word shape)
 	Word *TilePtr;
 	static_t *StatPtr;
 
-	if (numstatics>=MAXSTATICS) {
+	if (numstatics>=MAXSTATICS || shape >= ARRAYLEN(staticflags)) {
 		return;				/* Oh oh!! */
 	}
 	TilePtr = &tilemap[y][x];		/* Precalc tile pointer */
@@ -273,7 +273,7 @@ void SpawnPlayer(Word x,Word y,Word dir)
 
 **********************************/
 
-void SpawnStand(Word x,Word y,class_t which)
+actor_t *SpawnStand(Word x,Word y,class_t which)
 {
 	stateindex_t state;
 	classinfo_t	*info;
@@ -281,8 +281,8 @@ void SpawnStand(Word x,Word y,class_t which)
 	Word *TilePtr;
 	Word tile;
 
-	if (numactors==MAXACTORS) {	/* Too many actors already? */
-		return;					/* Exit */
+	if (numactors==MAXACTORS || which >= ARRAYLEN(classinfo)) {	/* Too many actors already? */
+		return NULL;					/* Exit */
 	}
 
 	EnemyHits[which] = 1;
@@ -311,6 +311,8 @@ void SpawnStand(Word x,Word y,class_t which)
 	ActorPtr->hitpoints = info->hitpoints;	/* Starting hit points */
 	++numactors;	/* I now add one more actor to the list */
 	++gamestate.killtotal;		/* Another critter must die! */
+
+	return ActorPtr;
 }
 
 
@@ -324,8 +326,9 @@ void SpawnAmbush(Word x,Word y,class_t which)
 {
 	actor_t *ActorPtr;
 
-	ActorPtr = &actors[numactors];	/* Get the pointer to the new actor entry */
-	SpawnStand(x,y,which);		/* Fill in all the entries */
+	ActorPtr = SpawnStand(x,y,which);		/* Fill in all the entries */
+	if (!ActorPtr)
+		return;
 	ActorPtr->flags |= FL_AMBUSH;	/* Set the ambush flag */
 }
 
@@ -455,7 +458,7 @@ void SpawnThings(void)
 	Word type;		/* Item to spawn */
 	Byte *spawn_p;
 	Word Count;		/* Number of items to create */
-	Word *EnemyPtr;
+	const Word *EnemyPtr;
 
 	memset(EnemyHits,0,sizeof(EnemyHits));
 	spawn_p = (Byte *)MapPtr+MapPtr->spawnlistofs;	/* Point to the spawn table */
@@ -507,7 +510,7 @@ void SpawnThings(void)
 				++x;
 			} while (EnemyPtr[x]);
 		}
-	} while (++Count<16);
+	} while (++Count<ARRAYLEN(EnemySprs));
 }
 
 /**********************************
@@ -555,6 +558,7 @@ Boolean SetupGameLevel(void)
 	Word *dest;
 	Word tile;
 	Word Count;
+	LongWord Length;
 
 /* clear counts*/
 
@@ -569,15 +573,21 @@ Boolean SetupGameLevel(void)
 
 	ReleaseMap();				/* Free up any previous map */
 	OldMapNum = (MapListPtr->MapRezNum)+gamestate.mapon;	/* Which map to load */
+	Length = ResourceLength(OldMapNum);
+	if (Length < sizeof *MapPtr)
+		return FALSE;
 	MapPtr = LoadAResource(OldMapNum);	/* Load in the map */
-	if (!MapPtr) {
+	if (!MapPtr)
 		return FALSE;		/* Uh.. yeah... */
-	}
 	DrawPsyched(1);		/* First stage done */
 	MapPtr->numspawn = SwapUShortLE(MapPtr->numspawn);	/* Fix for 68000 machines */
 	MapPtr->spawnlistofs = SwapUShortLE(MapPtr->spawnlistofs);
 	MapPtr->numnodes = SwapUShortLE(MapPtr->numnodes);
 	MapPtr->nodelistofs = SwapUShortLE(MapPtr->nodelistofs);
+	if (Length < MapPtr->spawnlistofs + MapPtr->numspawn * 3 || Length < MapPtr->nodelistofs + MapPtr->numnodes * sizeof(savenode_t)) {
+		ReleaseAResource(OldMapNum);
+		return FALSE;
+	}
 	numstatics = 0;		/* Clear out the static array */
 	numdoors = 0;		/* Clear out the door array */
 	numactors = 1;		/* player has spot 0*/
@@ -624,32 +634,37 @@ Boolean SetupGameLevel(void)
 
 ************************************/
 
-static Boolean LoadWallShape(Word Index,Byte *DarkPtr)
+static Boolean LoadWallShape(Word Index,const Byte *restrict DarkPtr)
 {
 	Byte *WallPtr;
 	Byte *Buffer;
 	Word WallVal;
+	Word WallNum;
 	Word j;
 
-	Buffer = AllocSomeMem(0x4000);		/* Get memory for wall */
-	if (!Buffer) {
+	if (Index+1 >= WallListLen)
 		return FALSE;
-	}
-	WallVal = WallListPtr[Index+1];		/* Which resource is it? */
-	WallPtr = LoadAResource(WallVal&0x3fff);	/* Load the shape */
+	Buffer = AllocSomeMem(0x4000);		/* Get memory for wall */
+	if (!Buffer)
+		return FALSE;
+	WallVal = WallList[Index+1];		/* Which resource is it? */
+	WallNum = WallVal&0x3fff;
+	if (!WallNum)
+		return FALSE;
+	WallPtr = LoadAResource(WallNum);	/* Load the shape */
 	if (!WallPtr) {
 		FreeSomeMem(Buffer);
 		return FALSE;
 	}
-	DLZSS(Buffer,WallPtr,0x4000);	/* Decompress it */
-	if (WallVal & 0x8000) {		/* Do I need to darken it? */
+	DLZSS(Buffer,0x4000,WallPtr, ResourceLength(WallNum));	/* Decompress it */
+	if (DarkPtr && (WallVal & 0x8000)) {		/* Do I need to darken it? */
 		j = 0;
 		do {
 			Buffer[j] = DarkPtr[Buffer[j]];	/* Use a lookup table to darken it */
 		} while (++j<0x4000);
 	}
 	ArtData[Index] = Buffer;			/* Save the pointer */
-	ReleaseAResource(WallVal&0x3fff);	/* Purge the data */
+	ReleaseAResource(WallNum);	/* Purge the data */
 	return TRUE;
 }
 
@@ -664,10 +679,11 @@ Word LoadWallArt(void)
 	Word i;
 	Word j;
 	Word RetVal;
-	Byte *DarkPtr;
+	Byte *DarkPtr = NULL;
 
 	RetVal = FALSE;
-	DarkPtr = LoadAResource(MyDarkData);		/* Get my darken table */
+	if (ResourceLength(MyDarkData) >= 256)
+		DarkPtr = LoadAResource(MyDarkData);		/* Get my darken table */
 	i = 0;
 	do {
 		if (WallHits[i]) {
@@ -704,24 +720,32 @@ Word LoadSpriteArt(void)
 	Word Length;
 	Byte *MyPtr;
 	Byte *MyNewPtr;
+	Word Num;
+	LongWord Size;
 
 	i=1;
 	do {
 		if (WallHits[i]) {
-			MyPtr = LoadAResource(i+(428-1));	/* Get the packed file */
+			Num = i+(428-1);
+			MyPtr = LoadAResource(Num);	/* Get the packed file */
 			if (!MyPtr) {
+				return FALSE;
+			}
+			Size = ResourceLength(Num);
+			if (Size < 2) {
+				ReleaseAResource(Num);
 				return FALSE;
 			}
 			Length = MyPtr[0];				/* Get the length unpacked */
 			Length |= MyPtr[1]<<8;
 			MyNewPtr = (Byte *)AllocSomeMem(Length);		/* Get memory for the sprite */
 			if (!MyNewPtr) {
-				ReleaseAResource(i+(428-1));
+				ReleaseAResource(Num);
 				return FALSE;
 			}
-			DLZSS(MyNewPtr,&MyPtr[2],Length);	/* Unpack it */
+			DLZSS(MyNewPtr,Length,&MyPtr[2], Size - 2);	/* Unpack it */
 			SpriteArray[i] = MyNewPtr;		/* Save the pointer */
-			ReleaseAResource(i+(428-1));		/* Release the resource */
+			ReleaseAResource(Num);		/* Release the resource */
 			DrawPsyched(i+66);
 		}
 	} while (++i<S_LASTONE);

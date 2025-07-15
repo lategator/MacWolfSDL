@@ -19,7 +19,7 @@ Word nummissiles;					/* Number of active missiles */
 missile_t missiles[MAXMISSILES];	/* Data for the missile items */
 Word numactors;						/* Number of active actors */
 actor_t actors[MAXACTORS];			/* Data for the actors */
-unsigned char *GameShapes[57];			/* Pointer to the game shape array */
+Word *GameShapes[57];			/* Pointer to the game shape array */
 Word difficulty;					/* 0 = easy, 1= normal, 2=hard*/
 gametype_t gamestate;				/* Status of the game (Save game) */
 exit_t playstate;					/* Current status of the game */
@@ -87,12 +87,15 @@ maplist_t *MapListPtr = NULL;		/* Pointer to map info record */
 short *SoundListPtr = NULL;	/* Pointer to sound list record */
 unsigned short *SongListPtr = NULL;	/* Pointer to song list record */
 unsigned short *WallListPtr = NULL;	/* Pointer to wall list record */
+unsigned short WallList[256];	/* List of wall numbers */
+LongWord SongListLen=0;	/* Number of songs in list */
+LongWord WallListLen=0;	/* Number of walls in list */
 Word MaxScaler = 1;			/* Maximum number of VALID scalers */
 Boolean ShowPush;			/* Cheat for pushwalls */
 Byte textures[MAPSIZE*2+5][MAPSIZE];	/* Texture indexes */
 Word NaziSound[] = {SND_ESEE,SND_ESEE2,SND_ESEE3,SND_ESEE4};
 
-classinfo_t	classinfo[] = {	/* Info for all the bad guys */
+classinfo_t	classinfo[12] = {	/* Info for all the bad guys */
 	{SND_ESEE,SND_EDIE,		/* Nazi */
 	ST_GRD_WLK1, ST_GRD_STND, ST_GRD_ATK1,ST_GRD_PAIN,ST_GRD_DIE,
 	100, 5, 0x0F, 6},

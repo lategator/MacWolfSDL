@@ -220,9 +220,11 @@ void MakeSmallFont(void)
 			} while (++Height<16);
 		}
 	} while (++i<64);
-	TempPtr = LoadAResource(MyBJFace);
-	memcpy(DestPtr,TempPtr,16*16);
-	ReleaseAResource(MyBJFace);
+	if (ResourceLength(MyBJFace) >= 16*16) {
+		TempPtr = LoadAResource(MyBJFace);
+		memcpy(DestPtr,TempPtr,16*16);
+		ReleaseAResource(MyBJFace);
+	}
 
 #if 0
 	TempPtr = AllocSomeMem(16*16*128);

@@ -1,3 +1,4 @@
+#include "WolfDef.h"
 #include "SDLWolf.h"
 #include <string.h>
 #include <fluidsynth.h>
@@ -5,6 +6,7 @@
 
 typedef struct {
 	void *data;
+	uint32_t refcount;
 } Resource;
 
 static const char *MainResourceFile = "Wolf3D.rsrc";
@@ -77,7 +79,6 @@ void InitResources(void)
 		err(1, "%s", TmpPath);
 }
 
-
 void KillResources(void)
 {
 	ReleaseSounds();
@@ -88,6 +89,10 @@ void KillResources(void)
 Boolean MountMapFileAbsolute(const char *FileName)
 {
 	ReleaseResources(&LevelResources, &LevelResourceCache);
+	MapListPtr = NULL;
+	SoundListPtr = NULL;
+	SongListPtr = NULL;
+	WallListPtr = NULL;
 	LevelResources = LoadResources(FileName, &LevelResourceCache);
 	if (LevelResources == NULL)
 		warn("MountMapFile: %s", FileName);
@@ -141,8 +146,10 @@ static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
 
 	if (res_attr(Rp, BrgrType, RezNum, &Attr) == NULL)
 		return NULL;
-	if (Cache[Attr.index].data)
-		return Cache[Attr.index].data;
+	if (Cache[Attr.index].data) {
+		Cache[Attr.index].refcount++;
+		return &Cache[Attr.index];
+	}
 	Data = SDL_malloc(Attr.size);
 	if (!Data)
 		return NULL;
@@ -151,7 +158,8 @@ static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
 		return NULL;
 	}
 	Cache[Attr.index].data = Data;
-	return Data;
+	Cache[Attr.index].refcount = 1;
+	return &Cache[Attr.index];
 }
 
 static Resource *GetResource(Word RezNum)
@@ -177,7 +185,7 @@ void *LoadAResource(Word RezNum)
 
 	Res = GetResource(RezNum);
 	if (Res)
-		return Res;
+		return Res->data;
 	return NULL;
 }
 
@@ -199,21 +207,49 @@ LongWord ResourceLength(Word RezNum)
 
 **********************************/
 
-void ReleaseAResource(Word RezNum)
+static Boolean UnrefResource(Word RezNum, RFILE *Rp, Resource *Cache)
 {
 	ResAttr attr;
-	if (LevelResources && res_attr(LevelResources, BrgrType, RezNum, &attr)) {
-		if (LevelResourceCache[attr.index].data) {
-			SDL_free(LevelResourceCache[attr.index].data);
-			LevelResourceCache[attr.index].data = NULL;
-		}
-	} else if (res_attr(MainResources, BrgrType, RezNum, &attr)) {
-		if (ResourceCache[attr.index].data) {
-			SDL_free(ResourceCache[attr.index].data);
-			ResourceCache[attr.index].data = NULL;
+	if (!res_attr(Rp, BrgrType, RezNum, &attr))
+		return FALSE;
+	if (Cache[attr.index].data) {
+		Cache[attr.index].refcount--;
+		if (Cache[attr.index].refcount == 0) {
+			SDL_free(Cache[attr.index].data);
+			Cache[attr.index].data = NULL;
 		}
 	}
+	return TRUE;
 }
+
+void ReleaseAResource(Word RezNum)
+{
+	if (LevelResources && UnrefResource(RezNum, LevelResources, LevelResourceCache))
+		return;
+	UnrefResource(RezNum, MainResources, ResourceCache);
+}
+
+static Boolean DestroyResource(Word RezNum, RFILE *Rp, Resource *Cache)
+{
+	ResAttr attr;
+	if (!res_attr(Rp, BrgrType, RezNum, &attr))
+		return FALSE;
+	if (Cache[attr.index].data) {
+		SDL_free(Cache[attr.index].data);
+		Cache[attr.index].data = NULL;
+		Cache[attr.index].refcount=0;
+	}
+	return TRUE;
+}
+
+
+void KillAResource(Word RezNum)
+{
+	if (LevelResources)
+		DestroyResource(RezNum, LevelResources, LevelResourceCache);
+	DestroyResource(RezNum, MainResources, ResourceCache);
+}
+
 
 /**********************************
 
@@ -221,47 +257,89 @@ void ReleaseAResource(Word RezNum)
 
 **********************************/
 
-void DLZSS(Byte * restrict Dest,const Byte * restrict Src,LongWord Length)
+void DLZSS(Byte * restrict Dest, LongWord DestLen, const Byte * restrict Src,LongWord SrcLen)
 {
 	Word BitBucket;
 	Word RunCount;
 	Word Fun;
 	Byte *BackPtr;
+	const Byte * const SrcEnd = Src + SrcLen;
+	Byte * const DstEnd = Dest + DestLen;
 
-	if (!Length) {
+	if (!SrcLen || !DestLen)
 		return;
-	}
 	BitBucket = (Word) Src[0] | 0x100;
 	++Src;
 	do {
 		if (BitBucket&1) {
+			if (Src >= SrcEnd)
+				break;
+			if (Dest >= DstEnd)
+				break;
 			Dest[0] = Src[0];
 			++Src;
 			++Dest;
-			--Length;
 		} else {
+			if (Src >= SrcEnd - 1)
+				break;
 			RunCount = (Word) Src[0] | ((Word) Src[1]<<8);
 			Fun = 0x1000-(RunCount&0xfff);
 			BackPtr = Dest-Fun;
 			RunCount = ((RunCount>>12) & 0x0f) + 3;
-			if (Length >= RunCount) {
-				Length -= RunCount;
-			} else {
-				Length = 0;
-			}
 			do {
+				if (Dest >= DstEnd)
+					return;
 				*Dest++ = *BackPtr++;
 			} while (--RunCount);
 			Src+=2;
 		}
-		if (Length == 0)
-			break;
 		BitBucket>>=1;
 		if (BitBucket==1) {
+			if (Src >= SrcEnd)
+				break;
 			BitBucket = (Word)Src[0] | 0x100;
 			++Src;
 		}
 	} while (1);
+}
+
+void *LoadCompressed(Word RezNum, LongWord *Length)
+{
+	LongWord *PackPtr;
+	void *UnpackPtr = NULL;
+	LongWord PackLength;
+	LongWord UnpackLength;
+
+	PackLength = ResourceLength(RezNum);
+	if (PackLength < sizeof UnpackLength)
+		return NULL;
+	PackPtr = LoadAResource(RezNum);
+	if (!PackPtr)
+		return NULL;
+	UnpackLength = SwapLongBE(PackPtr[0]);
+	UnpackPtr = AllocSomeMem(UnpackLength);
+	if (UnpackPtr) {
+		DLZSS(UnpackPtr,UnpackLength,(Byte *) &PackPtr[1], PackLength - sizeof UnpackLength);
+		if (Length)
+			*Length = UnpackLength;
+	}
+	ReleaseAResource(RezNum);
+	return UnpackPtr;
+}
+
+void *LoadCompressedShape(Word RezNum)
+{
+	Word *ShapePtr = NULL;
+	LongWord Len;
+
+	ShapePtr = LoadCompressed(RezNum, &Len);
+	if (!ShapePtr)
+		return NULL;
+	if (Len < 4 || Len < 4 + SwapUShortBE(ShapePtr[0]) * SwapUShortBE(ShapePtr[1])) {
+		FreeSomeMem(ShapePtr);
+		return NULL;
+	}
+	return ShapePtr;
 }
 
 /**********************************
@@ -270,11 +348,11 @@ void DLZSS(Byte * restrict Dest,const Byte * restrict Src,LongWord Length)
 
 **********************************/
 
-static void SoundDLZSS(const Byte* Src, size_t SrcSize, Byte *Dst, size_t DstSize)
+static void SoundDLZSS(Byte *Dest, size_t DestLen, const Byte* Src, size_t SrcLen)
 {
-	const Byte * const SrcEnd = Src + SrcSize;
-	Byte * const DstStart = Dst;
-	Byte * const DstEnd = Dst + DstSize;
+	const Byte * const SrcEnd = Src + SrcLen;
+	Byte * const DstStart = Dest;
+	Byte * const DstEnd = Dest + DestLen;
 	for (;;) {
 		if (Src >= SrcEnd)
 			break;
@@ -284,10 +362,10 @@ static void SoundDLZSS(const Byte* Src, size_t SrcSize, Byte *Dst, size_t DstSiz
 			if (control_bits & control_mask) {
 				if (Src >= SrcEnd)
 					break;
-				if (Dst >= DstEnd)
+				if (Dest >= DstEnd)
 					break;
 				uint8_t c = *Src++;
-				*Dst++ = c;
+				*Dest++ = c;
 
 			} else {
 				if (Src >= SrcEnd - 1)
@@ -295,14 +373,14 @@ static void SoundDLZSS(const Byte* Src, size_t SrcSize, Byte *Dst, size_t DstSiz
 				uint16_t params = (Src[0] << 8) | Src[1];
 				Src += 2;
 
-				size_t copy_offset = Dst - DstStart - ((1 << 12) - (params & 0x0FFF));
+				size_t copy_offset = Dest - DstStart - ((1 << 12) - (params & 0x0FFF));
 				uint8_t count = ((params >> 12) & 0x0F) + 3;
 				size_t copy_end_offset = copy_offset + count;
 
 				for (; copy_offset != copy_end_offset; copy_offset++) {
-					if (Dst >= DstEnd)
+					if (Dest >= DstEnd)
 						break;
-					*Dst++ = DstStart[copy_offset];
+					*Dest++ = DstStart[copy_offset];
 				}
 			}
 		}
@@ -319,7 +397,7 @@ static Byte *DecodeCsnd(const Byte *Buf, LongWord Len, LongWord *Size)
 	RealSize = SwapLongBE(*(const u_uint32_t*)Buf) & 0x00FFFFFF;
 	Data = SDL_malloc(RealSize);
 	if (!Data) return NULL;
-	SoundDLZSS(Buf + 4, Len - 4, Data, RealSize);
+	SoundDLZSS(Data, RealSize, Buf + 4, Len - 4);
 	uint8_t* Delta = Data;
 	uint8_t* const DataEnd = Data + RealSize;
 	for (uint8_t sample = *Delta++; Delta != DataEnd; Delta++) {
@@ -333,7 +411,7 @@ static Byte *DecodeCsnd(const Byte *Buf, LongWord Len, LongWord *Size)
 	return Data;
 }
 
-static Boolean LoadSound(Sound *Snd, Word ID)
+static Boolean LoadSound(RFILE *Rp, Sound *Snd, Word ID)
 {
 	ResAttr Attr;
 	uint8_t *Buf, *Decode;
@@ -341,14 +419,13 @@ static Boolean LoadSound(Sound *Snd, Word ID)
 	LongWord Size;
 
 	Type = CsndType;
-	if (!res_attr(MainResources, Type, ID, &Attr)) {
+	if (!res_attr(Rp, Type, ID, &Attr)) {
 		Type = SndType;
-		if (!res_attr(MainResources, Type, ID, &Attr))
+		if (!res_attr(Rp, Type, ID, &Attr))
 			return 0;
 	}
-	Buf = SDL_malloc(Attr.size);
-	if (!Buf) err(1, "malloc");
-	if (!res_read_ind(MainResources, Type, Attr.index, Buf, 0, Attr.size, NULL, NULL))
+	Buf = AllocSomeMem(Attr.size);
+	if (!res_read_ind(Rp, Type, Attr.index, Buf, 0, Attr.size, NULL, NULL))
 		goto Fail;
 	if (Type == CsndType) {
 		Decode = DecodeCsnd(Buf, Attr.size, &Size);
@@ -386,20 +463,22 @@ static void ReleaseSounds(void)
 	}
 }
 
-void RegisterSounds(short *SoundIDs)
+void RegisterSounds(short *SoundIDs, LongWord Len)
 {
 	size_t Count = 0;
 	size_t i;
 
 	ReleaseSounds();
-	for (short *SoundID = SoundIDs; *SoundID != -1; SoundID++, Count++);
+	for (short *SoundID = SoundIDs; Len > 0 && *SoundID != -1; SoundID++, Count++, Len--);
 	SoundCache = SDL_calloc(Count, sizeof(Sound));
 	NumSounds = Count;
 	if (!SoundCache) err(1, "malloc");
 	i = 0;
 	for (short *SoundID = SoundIDs; *SoundID != -1; SoundID++, i++) {
 		SoundCache[i].ID = *SoundID;
-		LoadSound(&SoundCache[i], *SoundID);
+		if (LevelResources && LoadSound(LevelResources, &SoundCache[i], *SoundID))
+			continue;
+		LoadSound(MainResources, &SoundCache[i], *SoundID);
 	}
 }
 
@@ -520,12 +599,15 @@ static int SoundFontFree(fluid_sfont_t *SFont)
 	for (i = 0; i < Header->ninstruments; i++) {
 		if (Header->instruments[i].preset)
 			delete_fluid_preset(Header->instruments[i].preset);
+		if (Header->instruments[i].sample)
+			delete_fluid_sample(Header->instruments[i].sample);
 	}
 	Sounds = (void*)&Header->instruments[Header->ninstruments];
 	for (i = 0; i < Header->nsounds; i++) {
 		if (Sounds[i].data)
 			SDL_free(Sounds[i].data);
 	}
+	SDL_free(Header);
 	delete_fluid_sfont(SFont);
 	return 0;
 }
@@ -590,11 +672,11 @@ void MacLoadSoundFont(void)
 				break;
 		}
 		if (j == Header->nsounds) {
-			if (!LoadSound(&Sounds[j], SoundID))
+			if (!LoadSound(MainResources, &Sounds[j], SoundID))
 				continue;
 			Ret = SDL_ConvertAudioSamples(
-			  &(SDL_AudioSpec){SDL_AUDIO_U8, 1, Sounds[j].samplerate}, Sounds[j].data, Sounds[j].size,
-			  &(SDL_AudioSpec){SDL_AUDIO_S16, 1, Sounds[j].samplerate}, &Data, &DstLen);
+				&(SDL_AudioSpec){SDL_AUDIO_U8, 1, Sounds[j].samplerate}, Sounds[j].data, Sounds[j].size,
+				&(SDL_AudioSpec){SDL_AUDIO_S16, 1, Sounds[j].samplerate}, &Data, &DstLen);
 			SDL_free(Sounds[j].data - 42);
 			if (!Ret)
 				continue;
@@ -602,7 +684,7 @@ void MacLoadSoundFont(void)
 			Header->nsounds++;
 		}
 		fluid_sample_set_sound_data(Sample, Sounds[j].data, NULL, Sounds[j].size,
-							  (Instruments[i].flags & 0x800) ? Sounds[j].samplerate : 22254, 0);
+								(Instruments[i].flags & 0x800) ? Sounds[j].samplerate : 22254, 0);
 		fluid_sample_set_pitch(Sample, Instruments[i].basenote ? Instruments[i].basenote : Sounds[j].basenote, 0);
 		if (!(Instruments[i].flags & 0x2000))
 			fluid_sample_set_loop(Sample, Sounds[j].loopstart, Sounds[j].loopend);

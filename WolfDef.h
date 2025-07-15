@@ -224,21 +224,6 @@ enum {BSPTOP,BSPBOTTOM,BSPLEFT,BSPRIGHT};	/* BSP quadrants */
 
 /**********************************
 
-	Compiled scaler
-
-**********************************/
-
-typedef struct {
-	unsigned short codeofs[WALLHEIGHT+1];		/* Entry to the code for sprites */
-#ifndef __APPLEIIGS__
-	Byte FixA1[WALLHEIGHT+1];		/* A1 adjust for the screen */
-	Byte Pad[1];			/* Long word align it... */
-#endif
-	Byte code[1];					/* Scaler code */
-} t_compscale;
-
-/**********************************
-
 	Status of the game (Save game record)
 
 **********************************/
@@ -281,7 +266,7 @@ typedef struct {
 	unsigned short spawnlistofs;	/* Must be short */
 	unsigned short numnodes;		/* Must be short */
 	unsigned short nodelistofs;		/* Must be short */
-	Byte data[1];		/* nodes, and spawn list */
+	Byte data[];		/* nodes, and spawn list */
 } loadmap_t;
 
 typedef struct {
@@ -295,7 +280,7 @@ typedef struct {
 typedef struct {
 	unsigned short MaxMap;			/* Maximum number of maps */
 	unsigned short MapRezNum;		/* Basic resource # */
-	MapInfo_t InfoArray[1];	/* Next map to jump to */
+	MapInfo_t InfoArray[];	/* Next map to jump to */
 } maplist_t;
 
 /**********************************
@@ -520,7 +505,7 @@ typedef struct {		/* Must match thing_t */
 #define	TI_PUSHWALL		0x200		/* Pushwall here */
 #define	TI_SWITCH		0x100		/* Exit switch here */
 #define	TI_BLOCKMOVE	0x80		/* Block in motion here */
-#define	TI_NUMMASK	0x7f			/* Can be an area, door number, or pwall number */
+#define	TI_NUMMASK	0x3f			/* Can be an area, door number, or pwall number */
 
 extern LongWord	rw_scale;
 extern LongWord	rw_scalestep;
@@ -600,7 +585,7 @@ extern void MoveMissiles(void);
 
 extern void SpawnStatic(Word x,Word y,Word shape);
 extern void SpawnPlayer(Word x,Word y,Word dir);
-extern void SpawnStand(Word x,Word y,class_t which);
+extern actor_t *SpawnStand(Word x,Word y,class_t which);
 extern void SpawnAmbush(Word x,Word y,class_t which);
 extern void SpawnDoor(Word x,Word y,Word type);
 extern void AddPWallTrack(Word x,Word y,Word tile);
@@ -729,7 +714,7 @@ extern void Intro(void);
 /* In Music.c */
 
 extern void StopSong(void);
-extern void StartSong(Word songnum);
+extern void StartSong(Word Index);
 
 /* In WolfMain.c */
 
@@ -830,8 +815,7 @@ extern Word nummissiles;					/* Number of active missiles */
 extern missile_t missiles[MAXMISSILES];		/* Data for the missile items */
 extern Word numactors;						/* Number of active actors */
 extern actor_t actors[MAXACTORS];			/* Data for the actors */
-extern t_compscale *AllScalers[MAXSCALER];	/* Pointers to all the compiled scalers */
-extern Byte *GameShapes[57];		/* Pointer to the game shape array */
+extern Word *GameShapes[57];		/* Pointer to the game shape array */
 extern Word difficulty;					/* 0 = easy, 1= normal, 2=hard*/
 extern gametype_t gamestate;			/* Status of the game (Save game) */
 extern exit_t playstate;				/* Current status of the game */
@@ -857,7 +841,7 @@ extern Word OldMapNum;					/* Currently loaded map # */
 extern loadmap_t *MapPtr;				/* Pointer to current loaded map */
 extern short clipshortangle;				/* Angle for the left edge of the screen */
 extern short clipshortangle2;				/* clipshortangle * 2 */
-extern classinfo_t classinfo[];			/* Class information for all bad guys */
+extern classinfo_t classinfo[12];		/* Class information for all bad guys */
 extern Word viewx;						/* X coord of camera */
 extern Word viewy;						/* Y coord of camera */
 extern fixed_t viewsin;					/* Base sine for viewing angle */
@@ -889,6 +873,9 @@ extern maplist_t *MapListPtr;		/* Pointer to map info record */
 extern short *SoundListPtr;	/* Pointer to sound list record */
 extern unsigned short *SongListPtr;	/* Pointer to song list record */
 extern unsigned short *WallListPtr;	/* Pointer to wall list record */
+extern unsigned short WallList[256];	/* List of wall numbers */
+extern LongWord SongListLen;	/* Number of songs in list */
+extern LongWord WallListLen;	/* Number of walls in list */
 extern Word MaxScaler;			/* Maximum number of VALID scalers */
 extern Word NaziSound[];		/* Sounds for nazis starting */
 extern Boolean ShowPush;		/* Cheat for showing pushwalls on automap */

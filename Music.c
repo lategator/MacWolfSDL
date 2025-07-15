@@ -17,7 +17,10 @@ void StopSong(void)
 
 **********************************/
 
-void StartSong(Word songnum)
+void StartSong(Word Index)
 {
-	PlaySong(songnum);			/* Stop the previous song (If any) */
+	if (Index < SongListLen)
+		PlaySong(SongListPtr[Index]);			/* Stop the previous song (If any) */
+	else
+		PlaySong(0);
 }

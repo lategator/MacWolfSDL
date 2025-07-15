@@ -287,7 +287,7 @@ void UpdateFace(void)
 
 void PrepPlayLoop (void)
 {
-	StartSong(SongListPtr[gamestate.mapon+2]);	/* start music */
+	StartSong(gamestate.mapon+2);	/* start music */
 	if (!SetupGameLevel()) {	/* Load the game map */
 		ReleaseMap();			/* Release map memory */
 		ReleaseScalers();		/* Release the compiled scalers */

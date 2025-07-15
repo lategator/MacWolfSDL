@@ -10,23 +10,19 @@
 
 void Intro(void)
 {
-	LongWord *PackPtr;
-	LongWord PackLength;
 	Byte *ShapePtr;
 
 	NewGameWindow(1);	/* Set to 512 mode */
 
 	FadeToBlack();		/* Fade out the video */
-	PackPtr = LoadAResource(rMacPlayPic);
-	PackLength = SwapLongBE(PackPtr[0]);
-	ShapePtr = AllocSomeMem(PackLength);
-	DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLength);
-	DrawShape(0,0,ShapePtr);
-	FreeSomeMem(ShapePtr);
-	ReleaseAResource(rMacPlayPic);
+	ShapePtr = LoadCompressedShape(rMacPlayPic);
+	if (ShapePtr) {
+		DrawShape(0,0,ShapePtr);
+		FreeSomeMem(ShapePtr);
+		BlastScreen();
+	}
 
-	BlastScreen();
-	StartSong(SongListPtr[0]);	/* Play the song */
+	StartSong(0);	/* Play the song */
 	FadeTo(rMacPlayPal);	/* Fade in the picture */
 	WaitTicksEvent(240);		/* Wait for event */
 	FadeTo(rIdLogoPal);
@@ -34,14 +30,12 @@ void Intro(void)
 		FadeToBlack();
 		ClearTheScreen(BLACK);
 		BlastScreen();
-		PackPtr = LoadAResource(rYummyPic);
-		PackLength = SwapLongBE(PackPtr[0]);
-		ShapePtr = AllocSomeMem(PackLength);
-		DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLength);
-		DrawShape((SCREENWIDTH-320)/2,(SCREENHEIGHT-200)/2,ShapePtr);
-		FreeSomeMem(ShapePtr);
-		ReleaseAResource(rYummyPic);
-		BlastScreen();
+		ShapePtr = LoadCompressedShape(rYummyPic);
+		if (ShapePtr) {
+			DrawShape((SCREENWIDTH-320)/2,(SCREENHEIGHT-200)/2,ShapePtr);
+			FreeSomeMem(ShapePtr);
+			BlastScreen();
+		}
 		FadeTo(rYummyPal);
 		WaitTicksEvent(600);
 	}

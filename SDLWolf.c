@@ -39,8 +39,10 @@ static LongWord MusicBufferFrames = 0;
 static Word SdlSfxNums[NAUDIOCHANS];
 static Byte *GameShapeBuffer = NULL;
 static char *MyPrefPath = NULL;
-extern int SelectedMenu;
+static SDL_Storage *MyPrefStorage = NULL;
 char *SaveFileName = NULL;
+
+extern int SelectedMenu;
 
 static void CloseAudio(void);
 static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt);
@@ -84,9 +86,12 @@ SDL_Storage *PrefStorage(void)
 {
 	SDL_Storage *Storage;
 
+	if (MyPrefStorage)
+		return MyPrefStorage;
 	Storage = SDL_OpenUserStorage(PrefOrg, PrefApp, 0);
 	if (!Storage)
 		return NULL;
+	MyPrefStorage = Storage;
 	while (!SDL_StorageReady(Storage)) {
 		SDL_Delay(1);
 	}
@@ -146,6 +151,8 @@ void GoodBye()
 	if (MyPrefPath)
 		SDL_free(MyPrefPath);
 	KillResources();
+	if (MyPrefStorage)
+		SDL_CloseStorage(MyPrefStorage);
 
 	SDL_Quit();
 	if (SaveFileName)
@@ -393,7 +400,7 @@ exit_t ReadSystemJoystick(void)
 		if (i != 8 && Keys[*KeyPtr])
 			joystick1 |= 1<<(i+4);	/* Set the joystick value */
 		KeyPtr++;					/* Next index */
-	} while (++i<sizeof KeyBinds/sizeof *KeyBinds);				/* All done? */
+	} while (++i<ARRAYLEN(KeyBinds));				/* All done? */
 	if (MouseEnabled) {
 		if (mousebuttons & SDL_BUTTON_LMASK)
 			joystick1 |= JOYPAD_B;
@@ -436,7 +443,7 @@ int ReadMenuJoystick(void)
 			return event.button.button;
 		} else if (event.type == SDL_EVENT_KEY_DOWN) {
 			KeyPtr = MenuKeyMatrix;
-			for (i = 0; i < sizeof MenuKeyMatrix/sizeof *MenuKeyMatrix; i++) {
+			for (i = 0; i < ARRAYLEN(MenuKeyMatrix); i++) {
 				if (KeyPtr->Code == event.key.scancode) {
 					if (!event.key.repeat || (KeyPtr->JoyValue != JOYPAD_A && KeyPtr->JoyValue != JOYPAD_B))
 						joystick1 |= KeyPtr->JoyValue;
@@ -491,8 +498,10 @@ void ResizeGameWindow(Word Width, Word Height)
 	Palette = SDL_CreateSurfacePalette(UIOverlay);
 	if (!Palette)
 		errx(1, "SDL_CreateSurfacePalette");
-	SetPalette(Palette, LoadAResource(rGamePal));
-	ReleaseAResource(rGamePal);
+	if (ResourceLength(rGamePal) >= 768) {
+		SetPalette(Palette, LoadAResource(rGamePal));
+		ReleaseAResource(rGamePal);
+	}
 	SDL_SetSurfaceBlendMode(UIOverlay, SDL_BLENDMODE_NONE);
 	SDL_SetSurfaceColorKey(UIOverlay, TRUE, 0);
 	SdlTexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
@@ -514,7 +523,8 @@ void ResizeGameWindow(Word Width, Word Height)
 Word NewGameWindow(Word NewVidSize)
 {
 	LongWord *LongPtr;
-	LongWord PackLength;
+	LongWord UnpackLength;
+	LongWord Offset;
 	Word i,j;
 	Boolean Pass2;
 
@@ -549,23 +559,22 @@ TryAgain:
 	ClearTheScreen(BLACK);		/* Set the screen to black */
 	BlastScreen();
 
-	LongPtr = (LongWord *) LoadAResource(VidPics[MacVidSize]);
-	if (!LongPtr) {
-		goto OhShit;
-	}
-	PackLength = SwapLongBE(LongPtr[0]);
-	GameShapeBuffer = AllocSomeMem(PackLength);	/* All the permanent game shapes */
-	if (!GameShapeBuffer) {		/* Can't load in the shapes */
-		ReleaseAResource(VidPics[MacVidSize]);	/* Release it NOW! */
-		goto OhShit;
-	}
-	DLZSS(GameShapeBuffer,(Byte *) &LongPtr[1], PackLength);
-	ReleaseAResource(VidPics[MacVidSize]);
+	GameShapeBuffer = LoadCompressed(VidPics[MacVidSize], &UnpackLength);	/* All the permanent game shapes */
+	if (!GameShapeBuffer)
+		goto Corrupted;
 	i = 0;
 	j = (MacVidSize==1) ? 47+10 : 47;		/* 512 mode has 10 shapes more */
 	LongPtr = (LongWord *) GameShapeBuffer;
+	if (UnpackLength < j * sizeof(LongWord))
+		goto Corrupted;
 	do {
-		GameShapes[i] = GameShapeBuffer+SwapLongBE(LongPtr[i]);
+		Offset = SwapLongBE(LongPtr[i]);
+		if (UnpackLength < Offset + 4)
+			goto Corrupted;
+		Word *ShapePtr = (void*)(GameShapeBuffer+Offset);
+		if (UnpackLength < Offset + 4 + SwapUShortBE(ShapePtr[0]) * SwapUShortBE(ShapePtr[1]))
+			goto Corrupted;
+		GameShapes[i] = ShapePtr;
 	} while (++i<j);
 	if (Pass2) {		/* Low memory? */
 		if (!StartupRendering(NewVidSize)) {		/* Reset the scalers... */
@@ -576,6 +585,8 @@ TryAgain:
 	return MacVidSize;
 
 OhShit:			/* Oh oh.... */
+	if (GameShapeBuffer)
+		FreeSomeMem(GameShapeBuffer);
 	if (Pass2) {
 		if (!NewVidSize) {		/* At the smallest screen size? */
 			BailOut();
@@ -588,6 +599,9 @@ OhShit:			/* Oh oh.... */
 		Pass2 = TRUE;
 	}
 	goto TryAgain;				/* Let's try again */
+Corrupted:
+	BailOut("Game data is corrupted");
+	__builtin_unreachable();
 }
 
 void GrabMouse(void)
@@ -663,24 +677,19 @@ static SDL_FRect PsychedRect;
 
 void ShowGetPsyched(void)
 {
-	LongWord *PackPtr;
 	Byte *ShapePtr;
-	LongWord PackLength;
 	Word X,Y;
-
-	ClearTheScreen(BLACK);
-	BlastScreen();
-	PackPtr = LoadAResource(rGetPsychPic);
-	PackLength = SwapLongBE(PackPtr[0]);
-	ShapePtr = AllocSomeMem(PackLength);
-	DLZSS(ShapePtr,(Byte *) &PackPtr[1],PackLength);
 
 	X = (MacWidth-224)/2;
 	Y = (MacViewHeight-56)/2;
-	DrawShape(X,Y,ShapePtr);
-	FreeSomeMem(ShapePtr);
-	ReleaseAResource(rGetPsychPic);
+	ClearTheScreen(BLACK);
 	BlastScreen();
+	ShapePtr = LoadCompressedShape(rGetPsychPic);
+	if (ShapePtr) {
+		DrawShape(X,Y,ShapePtr);
+		FreeSomeMem(ShapePtr);
+		BlastScreen();
+	}
 	SetAPalette(rGamePal);
 	SDL_SetRenderDrawColor(SdlRenderer, 255, 0, 0, 255);
 	PsychedRect.y = Y + PSYCHEDY;
@@ -724,19 +733,25 @@ Byte MachType[4] = "SDL3";
 void SaveGame(void)
 {
 	long Count;
+	uint32_t StrLen;
 	Word PWallWord;
 	FILE *FileRef;
 
 	if (!SaveFileName)
 		return;
 	FileRef = fopen(SaveFileName, "wb");
-	if (!FileRef)
+	if (!FileRef) {
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", "Failed to save game", SdlWindow);
 		return;
+	}
 
 	Count = 4;							/* Default length */
 	fwrite(&MachType, 1, Count, FileRef);	/* Save a machine type ID */
-	Count = sizeof(unsigned short);
-	fwrite(&MapListPtr->MaxMap, 1, Count, FileRef); 	/* Number of maps (ID) */
+	StrLen = strlen(ScenarioPath);
+	Count = 4;
+	fwrite(&StrLen, 1, Count, FileRef);	/* Save scenario path len */
+	Count = StrLen;
+	fwrite(ScenarioPath, 1, Count, FileRef);	/* Save full path to scenario file */
 	Count = sizeof(gamestate);
 	fwrite(&gamestate, 1, Count, FileRef);		/* Save the game stats */
 	Count = sizeof(PushWallRec);
@@ -800,17 +815,24 @@ void SaveGame(void)
 **********************************/
 void *SaveRecord;
 void *SaveRecordMem;
+LongWord SaveRecordSize;
+
+#define CHECKSPACE(n) do { \
+	if (FilePtr.B - TheMem + (n) < FileSize) \
+		goto Bogus; \
+	} while (0)
 
 Boolean LoadGame(void)
 {
 	LongWord FileSize;
+	LongWord PathLen;
 	union {
 		Byte *B;
-		unsigned short *S;
-		Word *W;
-		LongWord *L;
+		u_uint16_t *S;
+		u_uint16_t *W;
+		u_uint32_t *L;
 	} FilePtr;
-	void *TheMem;
+	Byte *TheMem;
 	FILE *FileRef;
 
 	if (!SaveFileName)
@@ -821,7 +843,7 @@ Boolean LoadGame(void)
 	if (fseek(FileRef, 0, SEEK_END))
 		goto BadFile;
 	FileSize = ftell(FileRef);
-	if ((int)FileSize < 0)
+	if ((int)FileSize <= 8)
 		goto BadFile;
 	if (fseek(FileRef, 0, SEEK_SET))
 		goto BadFile;
@@ -829,27 +851,43 @@ Boolean LoadGame(void)
 	if (!FilePtr.B) {						/* No memory! */
 		return FALSE;
 	}
-	fread(FilePtr.B, 1, FileSize, FileRef);	/* Open the file */
+	if (fread(FilePtr.B, 1, FileSize, FileRef) != FileSize)	/* Open the file */
+		goto Bogus;
 	fclose(FileRef);						/* Close the file */
 	if (memcmp(MachType,FilePtr.B,4)) {		/* Is this the proper machine type? */
 		goto Bogus;
 	}
 	FilePtr.B+=4;							/* Index past signature */
-	if (MapListPtr->MaxMap!=*FilePtr.S) {	/* Map count the same? */
-		goto Bogus;							/* Must be differant game */
-	}
-	++FilePtr.S;							/* Index past count */
+	PathLen = *FilePtr.L;
+	FilePtr.B+=4;							/* Index past length */
+	CHECKSPACE(PathLen);
+	if (ScenarioPath)
+		FreeSomeMem(ScenarioPath);
+	ScenarioPath = AllocSomeMem(PathLen+1);
+	memcpy(ScenarioPath, FilePtr.B, PathLen);
+	ScenarioPath[PathLen] = '\0';
+	MountMapFile(ScenarioPath);
+	LoadMapSetData();
+	CHECKSPACE(sizeof(gamestate));
 	memcpy(&gamestate,FilePtr.B,sizeof(gamestate));	/* Reset the game state */
 	SaveRecord = FilePtr.B;
 	SaveRecordMem = TheMem;
+	SaveRecordSize = FileSize;
 	return TRUE;
 
 Bogus:
 	FreeSomeMem(TheMem);
 BadFile:
 	fclose(FileRef);
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", "Failed to load game", SdlWindow);
 	return FALSE;
 }
+
+#define COPYCHECKED(dest, size) do { \
+		CHECKSPACE((size)); \
+		memcpy((dest),FilePtr.B,(size)); \
+		FilePtr.B+=(size); \
+	} while (0)
 
 void FinishLoadGame(void)
 {
@@ -859,70 +897,60 @@ void FinishLoadGame(void)
 		Word *W;
 		LongWord *L;
 	} FilePtr;
+	LongWord FileSize;
+	Byte *TheMem;
+	Word Tmp;
 
 	FilePtr.B = SaveRecord;
+	TheMem = SaveRecordMem;
+	FileSize = SaveRecordSize;
 
-	memcpy(&gamestate,FilePtr.B,sizeof(gamestate));	/* Reset the game state */
-	FilePtr.B+=sizeof(gamestate);
+	COPYCHECKED(&gamestate,sizeof(gamestate));	/* Reset the game state */
+	COPYCHECKED(&PushWallRec,sizeof(PushWallRec));				/* Record for the single pushwall in progress */
 
-	memcpy(&PushWallRec,FilePtr.B,sizeof(PushWallRec));				/* Record for the single pushwall in progress */
-	FilePtr.B+=sizeof(PushWallRec);
+	COPYCHECKED(&nummissiles,sizeof nummissiles);
+	if (nummissiles)
+		COPYCHECKED(missiles,sizeof(missile_t)*nummissiles);
 
-	nummissiles = *FilePtr.W;
-	++FilePtr.W;
-	if (nummissiles) {
-		memcpy(&missiles[0],FilePtr.B,sizeof(missile_t)*nummissiles);
-		FilePtr.B += sizeof(missile_t)*nummissiles;
-	}
+	COPYCHECKED(&numactors,sizeof numactors);
+	if (numactors)
+		COPYCHECKED(actors,sizeof(actor_t)*numactors);
 
-	numactors = *FilePtr.W;
-	++FilePtr.W;
-	if (numactors) {
-		memcpy(&actors[0],FilePtr.B,sizeof(actor_t)*numactors);
-		FilePtr.B += sizeof(actor_t)*numactors;
-	}
+	COPYCHECKED(&numdoors,sizeof numdoors);
+	if (numdoors)
+		COPYCHECKED(doors,sizeof(door_t)*numdoors);
 
-	numdoors = *FilePtr.W;
-	++FilePtr.W;
-	if (numdoors) {
-		memcpy(&doors[0],FilePtr.B,sizeof(door_t)*numdoors);
-		FilePtr.B += sizeof(door_t)*numdoors;
-	}
+	COPYCHECKED(&numstatics,sizeof numstatics);
+	if (numstatics)
+		COPYCHECKED(statics,sizeof(static_t)*numstatics);
 
-	numstatics = *FilePtr.W;
-	++FilePtr.W;
-	if (numstatics) {
-		memcpy(&statics[0],FilePtr.B,sizeof(static_t)*numstatics);
-		FilePtr.B += sizeof(static_t)*numstatics;
-	}
-	memcpy(MapPtr,FilePtr.B,64*64);
-	FilePtr.B += 64*64;
-	memcpy(&tilemap,FilePtr.B,sizeof(tilemap));						/* Tile map */
-	FilePtr.B += sizeof(tilemap);		/* Index past data */
+	COPYCHECKED(MapPtr,MAPSIZE*MAPSIZE);
+	COPYCHECKED(tilemap,sizeof tilemap);						/* Tile map */
 
-	ConnectCount = *FilePtr.W;		/* Number of valid interconnects */
+	COPYCHECKED(&ConnectCount,sizeof ConnectCount);		/* Number of valid interconnects */
 	FilePtr.W++;
-	if (ConnectCount) {
-		memcpy(areaconnect,FilePtr.B,sizeof(connect_t)*ConnectCount);	/* Is this area mated with another? */
-		FilePtr.B+= sizeof(connect_t)*ConnectCount;
-	}
-	memcpy(areabyplayer,FilePtr.B,sizeof(areabyplayer));
-	FilePtr.B+=sizeof(areabyplayer);	/* Which areas can I see into? */
+	if (ConnectCount)
+		COPYCHECKED(areaconnect,sizeof(connect_t)*ConnectCount);	/* Is this area mated with another? */
+	COPYCHECKED(areabyplayer,sizeof(areabyplayer));	/* Which areas can I see into? */
 
-	memcpy(&textures[0],FilePtr.B,(128+5)*64);
-	FilePtr.B+=((128+5)*64);				/* Texture array for pushwalls */
+	COPYCHECKED(textures,sizeof textures);;				/* Texture array for pushwalls */
 
 	pwallseg = 0;			/* Assume bogus */
-	if (*FilePtr.W) {
+	COPYCHECKED(&Tmp,sizeof Tmp);				/* Texture array for pushwalls */
+	if (Tmp) {
 		pwallseg = (saveseg_t *)nodes;
-		pwallseg = &pwallseg[*FilePtr.W-1];
+		pwallseg = &pwallseg[Tmp-1];
 	}
-	++FilePtr.W;
-	memcpy(nodes,FilePtr.B,MapPtr->numnodes*sizeof(savenode_t));
-/*	FilePtr.B+=(MapPtr->numnodes*sizeof(savenode_t));	*//* Next entry */
+	COPYCHECKED(nodes,MapPtr->numnodes*sizeof(savenode_t));
 
 	FreeSomeMem(SaveRecordMem);
+	return;
+Bogus:
+	BailOut("Save file corrupted: %s", SaveFileName);
 }
+
+#undef COPYCHECKED
+#undef CHECKSPACE
 
 /**********************************
 
@@ -1005,11 +1033,11 @@ static int PrefsIniHandler(void* User, const char* Section, const char* Name, co
 			if (difficulty > 3) difficulty = 3;
 		}
 	} else if (SDL_strcasecmp(Section, "keys") == 0) {
-		for (i = 0; i < 12; i++) {
+		for (i = 0; i < ARRAYLEN(KeyBinds); i++) {
 			if (SDL_strcasecmp(Name, KeyPrefNames[i]) == 0) {
 				Code = SDL_GetScancodeFromName(Value);
 				if (Code != SDL_SCANCODE_UNKNOWN)
-					KeyBinds[11-i] = Code;
+					KeyBinds[ARRAYLEN(KeyBinds)-1-i] = Code;
 			}
 		}
 	}
@@ -1067,7 +1095,7 @@ void SavePrefs(void)
 	B += snprintf(B, End - B, "ViewSize = %d\n", GameViewSize);
 	B += snprintf(B, End - B, "Difficulty = %d\n", difficulty);
 	B += snprintf(B, End - B, "[Keys]\n");
-	for (i = 0; i < 12; i++)
+	for (i = 0; i < ARRAYLEN(KeyBinds); i++)
 		B += snprintf(B, End - B, "%s = %s\n", KeyPrefNames[i], SDL_GetScancodeName(KeyBinds[11-i]));
 	SDL_WriteStorageFile(Storage, PrefsFile, Buf, B - Buf);
 }
@@ -1085,7 +1113,8 @@ static void ProcessMusic(void *User, SDL_AudioStream *Stream, int Needed, int To
 	FramesLeft = (Needed + (2 * sizeof(int16_t))-1) / (2 * sizeof(int16_t));
 	while (FramesLeft > 0) {
 		n = FramesLeft < MusicBufferFrames ? FramesLeft : MusicBufferFrames;
-		fluid_synth_write_s16(FluidSynth, n, MusicBuffer, 0, 2, MusicBuffer, 1, 2);
+		if (fluid_synth_write_s16(FluidSynth, n, MusicBuffer, 0, 2, MusicBuffer, 1, 2) == FLUID_FAILED)
+			break;
 		SDL_PutAudioStreamData(Stream, MusicBuffer, n * (2 * sizeof(int16_t)));
 		FramesLeft -= n;
 	}
