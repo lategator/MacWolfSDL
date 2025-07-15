@@ -21,13 +21,14 @@ static const Word VidXs[] = {320,512,640,640};	/* Screen sizes to play with */
 static const Word VidYs[] = {200,384,400,480};
 static const Word VidVs[] = {160,320,320,400};
 static const Word VidPics[] = {rFaceShapes,rFace512,rFace640,rFace640};		/* Resource #'s for art */
-static SDL_Window *SdlWindow = NULL;
+SDL_Window *SdlWindow = NULL;
 SDL_Renderer *SdlRenderer = NULL;
-static SDL_Texture *SdlTexture = NULL;
-static SDL_Surface *SdlSurface = NULL;
-static SDL_Texture *UITexture = NULL;
-static SDL_Surface *UIOverlay = NULL;
-static SDL_Palette *SdlPalette = NULL;
+SDL_Surface *CurrentSurface = NULL;
+static SDL_Surface *ScreenSurface = NULL;
+static SDL_Texture *ScreenTexture = NULL;
+static SDL_Texture *FramebufferTexture = NULL;
+static SDL_Surface *UISurface = NULL;
+static SDL_Palette *ScreenPalette = NULL;
 static SDL_AudioDeviceID SdlAudioDevice = 0;
 static SDL_AudioStream *SdlSfxChannels[NAUDIOCHANS] = { NULL };
 static SDL_AudioStream *SdlMusicStream;
@@ -135,7 +136,7 @@ void SetPalette(SDL_Palette *Palette, unsigned char *PalPtr)
 void SetAPalettePtr(unsigned char *PalPtr)
 {
 	memcpy(CurrentPal,PalPtr,768);
-	SetPalette(SdlPalette, PalPtr);
+	SetPalette(ScreenPalette, PalPtr);
 }
 
 static void Cleanup(int status)
@@ -161,14 +162,14 @@ static void Cleanup(int status)
 		delete_fluid_synth(FluidSynth);
 	if (FluidSettings)
 		delete_fluid_settings(FluidSettings);
-	if (SdlSurface)
-		SDL_DestroySurface(SdlSurface);
-	if (UIOverlay)
-		SDL_DestroySurface(UIOverlay);
-	if (UITexture)
-		SDL_DestroyTexture(UITexture);
-	if (SdlTexture)
-		SDL_DestroyTexture(SdlTexture);
+	if (ScreenSurface)
+		SDL_DestroySurface(ScreenSurface);
+	if (UISurface)
+		SDL_DestroySurface(UISurface);
+	if (ScreenTexture)
+		SDL_DestroyTexture(ScreenTexture);
+	if (FramebufferTexture)
+		SDL_DestroyTexture(FramebufferTexture);
 	if (SdlRenderer)
 		SDL_DestroyRenderer(SdlRenderer);
 	if (SdlWindow)
@@ -208,51 +209,86 @@ static void FluidError(int Level, const char *Msg, void *Data)
 	BailOut("FluidSynth: %s", Msg);
 }
 
-static void BlitSurfaceTex(SDL_Surface *Surface, SDL_Texture *Texture, const SDL_Rect *rect, Boolean Clear)
+static void ClearScreenTexture(void)
+{
+	SDL_Surface *Screen;
+	SDL_LockTextureToSurface(ScreenTexture, NULL, &Screen);
+	SDL_ClearSurface(Screen, 0, 0, 0, 0);
+	SDL_UnlockTexture(ScreenTexture);
+}
+
+void BlitSurface(SDL_Surface *Surface, const SDL_Rect *Rect)
 {
 	SDL_Surface *Screen;
 	Boolean Lock = (Surface->flags & SDL_SURFACE_LOCKED) != 0;
-	SDL_LockTextureToSurface(Texture, NULL, &Screen);
+	SDL_LockTextureToSurface(ScreenTexture, NULL, &Screen);
 	if (Lock)
 		SDL_UnlockSurface(Surface);
-	if (Clear)
-		SDL_ClearSurface(Screen, 0, 0, 0, 0);
-	SDL_BlitSurface(Surface, NULL, Screen, rect);
+	SDL_BlitSurface(Surface, NULL, Screen, Rect);
 	if (Lock)
 		SDL_LockSurface(Surface);
-	SDL_UnlockTexture(Texture);
-}
-
-void BlitSurface(SDL_Surface *Surface, const SDL_Rect *rect)
-{
-	BlitSurfaceTex(Surface, SdlTexture, rect, FALSE);
+	SDL_UnlockTexture(ScreenTexture);
 }
 
 void BlitScreen(void)
 {
-	BlitSurface(SdlSurface, NULL);
+	BlitSurface(ScreenSurface, NULL);
+}
+
+static void SetPresentationMode(void)
+{
+	SDL_RendererLogicalPresentation Present = SDL_LOGICAL_PRESENTATION_INTEGER_SCALE;
+	switch (ScreenScaleMode) {
+		case 0: Present = SDL_LOGICAL_PRESENTATION_INTEGER_SCALE; break;
+		case 1: Present = SDL_LOGICAL_PRESENTATION_LETTERBOX; break;
+		case 2: Present = SDL_LOGICAL_PRESENTATION_STRETCH; break;
+		default: break;
+	}
+	SDL_SetRenderLogicalPresentation(SdlRenderer, MacWidth, MacHeight, Present);
+}
+
+void ClearFrameBuffer(void)
+{
+	SDL_SetRenderTarget(SdlRenderer, FramebufferTexture);
+	SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 0);
+	SDL_RenderClear(SdlRenderer);
+}
+
+void RenderScreen(void)
+{
+	SDL_SetRenderTarget(SdlRenderer, NULL);
+	SetPresentationMode();
+	SDL_RenderTexture(SdlRenderer, FramebufferTexture, NULL, NULL);
+	SDL_RenderPresent(SdlRenderer);
+	SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 0);
+	SDL_RenderClear(SdlRenderer);
 }
 
 void StartUIOverlay(void)
 {
-	SDL_RenderTexture(SdlRenderer, SdlTexture, NULL, NULL);
-	VideoPointer = UIOverlay->pixels;
+	SDL_SetRenderTarget(SdlRenderer, FramebufferTexture);
+	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
+	VideoPointer = UISurface->pixels;
+	CurrentSurface = UISurface;
 	ClearTheScreen(WHITE);
+	ClearScreenTexture();
 }
 
 void EndUIOverlay(void)
 {
-	VideoPointer = SdlSurface->pixels;
-	BlitSurfaceTex(UIOverlay, UITexture, NULL, TRUE);
-	SDL_RenderTexture(SdlRenderer, UITexture, NULL, NULL);
-	SDL_RenderPresent(SdlRenderer);
+	VideoPointer = ScreenSurface->pixels;
+	CurrentSurface = ScreenSurface;
+	BlitSurface(UISurface, NULL);
+	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
+	RenderScreen();
 }
 
 void BlastScreen(void)
 {
 	BlitScreen();
-	SDL_RenderTexture(SdlRenderer, SdlTexture, NULL, NULL);
-	SDL_RenderPresent(SdlRenderer);
+	SDL_SetRenderTarget(SdlRenderer, FramebufferTexture);
+	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
+	RenderScreen();
 }
 
 void BlastScreen2(Rect *BlastRect)
@@ -267,6 +303,9 @@ Boolean ProcessGlobalEvent(SDL_Event *Event)
 		case SDL_EVENT_QUIT:
 			GoodBye();
 			__builtin_unreachable();
+		case SDL_EVENT_WINDOW_RESIZED:
+			RenderScreen();
+			return TRUE;
 		case SDL_EVENT_GAMEPAD_ADDED:
 			SDL_OpenGamepad(Event->gdevice.which);
 			return TRUE;
@@ -604,6 +643,11 @@ int ReadMenuJoystick(void)
 	return 0;
 }
 
+void UpdateVideoSettings(void)
+{
+	SDL_SetTextureScaleMode(FramebufferTexture, ScreenFilter);
+}
+
 void ResizeGameWindow(Word Width, Word Height)
 {
 	SDL_Palette *Palette;
@@ -617,55 +661,63 @@ void ResizeGameWindow(Word Width, Word Height)
 	MacViewHeight = Height;
 	MacVidSize = -1;
 	if (!SdlWindow) {
-		SdlWindow = SDL_CreateWindow("Wolfenstein 3D", MacWidth, MacHeight, 0);
+		SdlWindow = SDL_CreateWindow("Wolfenstein 3D", MacWidth, MacHeight, SDL_WINDOW_RESIZABLE);
 		if (!SdlWindow)
 			BailOut("SDL_CreateWindow: %s", SDL_GetError());
 		SdlRenderer = SDL_CreateRenderer(SdlWindow, NULL);
 		if (!SdlRenderer)
 			BailOut("SDL_CreateRenderer: %s", SDL_GetError());
 	} else {
-		if (SdlSurface)
-			SDL_DestroySurface(SdlSurface);
-		if (UIOverlay)
-			SDL_DestroySurface(UIOverlay);
-		if (SdlTexture)
-			SDL_DestroyTexture(SdlTexture);
-		if (UITexture)
-			SDL_DestroyTexture(UITexture);
-		SDL_SetWindowSize(SdlWindow, MacWidth, MacHeight);
+		if (ScreenSurface)
+			SDL_DestroySurface(ScreenSurface);
+		if (UISurface)
+			SDL_DestroySurface(UISurface);
+		if (ScreenTexture)
+			SDL_DestroyTexture(ScreenTexture);
+		if (FramebufferTexture)
+			SDL_DestroyTexture(FramebufferTexture);
+		ScreenSurface = NULL;
+		UISurface = NULL;
+		ScreenTexture = NULL;
+		FramebufferTexture = NULL;
 	}
-	SdlSurface = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
-	if (!SdlSurface)
+	SDL_SetWindowMinimumSize(SdlWindow, MacWidth, MacHeight);
+	SDL_SetWindowFullscreen(SdlWindow, FullScreen);
+	SDL_SetRenderTarget(SdlRenderer, NULL);
+	SetPresentationMode();
+	ScreenSurface = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
+	if (!ScreenSurface)
 		BailOut("SDL_CreateSurface: %s", SDL_GetError());
-	SdlPalette = SDL_CreateSurfacePalette(SdlSurface);
-	if (!SdlPalette)
+	CurrentSurface = ScreenSurface;
+	ScreenPalette = SDL_CreateSurfacePalette(ScreenSurface);
+	if (!ScreenPalette)
 		BailOut("SDL_CreateSurfacePalette: %s", SDL_GetError());
-	UIOverlay = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
-	if (!UIOverlay)
+	UISurface = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
+	if (!UISurface)
 		BailOut("SDL_CreateSurface: %s", SDL_GetError());
-	Palette = SDL_CreateSurfacePalette(UIOverlay);
+	Palette = SDL_CreateSurfacePalette(UISurface);
 	if (!Palette)
 		BailOut("SDL_CreateSurfacePalette: %s", SDL_GetError());
 	if (ResourceLength(rGamePal) >= 768) {
 		SetPalette(Palette, LoadAResource(rGamePal));
 		ReleaseAResource(rGamePal);
 	}
-	SDL_SetSurfaceBlendMode(UIOverlay, SDL_BLENDMODE_NONE);
-	SDL_SetSurfaceColorKey(UIOverlay, TRUE, 0);
-	SdlTexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
-	if (!SdlTexture)
+	SDL_SetSurfaceColorKey(UISurface, TRUE, 0);
+	ScreenTexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
+	if (!ScreenTexture)
 		BailOut("SDL_CreateTexture: %s", SDL_GetError());
-	UITexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
-	if (!UITexture)
+	FramebufferTexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_TARGET, MacWidth, MacHeight);
+	if (!FramebufferTexture)
 		BailOut("SDL_CreateTexture: %s", SDL_GetError());
 
-	if (SDL_MUSTLOCK(SdlSurface))
-		SDL_LockSurface(SdlSurface);
-	if (SDL_MUSTLOCK(UIOverlay))
-		SDL_LockSurface(UIOverlay);
-	VideoPointer = SdlSurface->pixels;
-	VideoWidth = SdlSurface->pitch;
+	if (SDL_MUSTLOCK(ScreenSurface))
+		SDL_LockSurface(ScreenSurface);
+	if (SDL_MUSTLOCK(UISurface))
+		SDL_LockSurface(UISurface);
+	VideoPointer = ScreenSurface->pixels;
+	VideoWidth = ScreenSurface->pitch;
 	InitYTable();				/* Init the game's YTable */
+	UpdateVideoSettings();
 }
 
 Word NewGameWindow(Word NewVidSize)
@@ -834,7 +886,6 @@ void ShowGetPsyched(void)
 		BlastScreen();
 	}
 	SetAPalette(rGamePal);
-	SDL_SetRenderDrawColor(SdlRenderer, 255, 0, 0, 255);
 	PsychedRect.y = Y + PSYCHEDY;
 	PsychedRect.h = PSYCHEDHIGH;
 	PsychedRect.x = X + PSYCHEDX;
@@ -849,9 +900,11 @@ void DrawPsyched(Word Index)
 	Factor = Factor / (float) MAXINDEX;
 	PsychedRect.w = SDL_floorf(Factor);
 	BlitScreen();
-	SDL_RenderTexture(SdlRenderer, SdlTexture, NULL, NULL);
+	SDL_SetRenderTarget(SdlRenderer, FramebufferTexture);
+	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
+	SDL_SetRenderDrawColor(SdlRenderer, 255, 0, 0, 255);
 	SDL_RenderFillRect(SdlRenderer, &PsychedRect);
-	SDL_RenderPresent(SdlRenderer);
+	RenderScreen();
 }
 
 void EndGetPsyched(void)
@@ -1162,18 +1215,31 @@ static int PrefsIniHandler(void* User, const char* Section, const char* Name, co
 	int i;
 	SDL_Scancode Code;
 	if (SDL_strcasecmp(Section, "main") == 0) {
-		if (SDL_strcasecmp(Name, "state") == 0) {
-			SystemState = SDL_atoi(Value) & 3;
-		} else if (SDL_strcasecmp(Name, "mouse") == 0) {
+		if (SDL_strcasecmp(Name, "mouse") == 0) {
 			MouseEnabled = StrToBool(Value);
 		} else if (SDL_strcasecmp(Name, "governor") == 0) {
 			SlowDown = StrToBool(Value);
-		} else if (SDL_strcasecmp(Name, "viewsize") == 0) {
-			GameViewSize = SDL_atoi(Value);
-			if (GameViewSize > 3) GameViewSize = 3;
 		} else if (SDL_strcasecmp(Name, "difficulty") == 0) {
 			difficulty = SDL_atoi(Value);
 			if (difficulty > 3) difficulty = 3;
+		}
+	} else if (SDL_strcasecmp(Section, "audio") == 0) {
+		if (SDL_strcasecmp(Name, "sfx") == 0) {
+			SystemState |= StrToBool(Value) ? SfxActive : 0;
+		} else if (SDL_strcasecmp(Name, "music") == 0) {
+			SystemState |= StrToBool(Value) ? MusicActive : 0;
+		}
+	} else if (SDL_strcasecmp(Section, "video") == 0) {
+		if (SDL_strcasecmp(Name, "fullscreen") == 0) {
+			FullScreen = StrToBool(Value);
+		} else if (SDL_strcasecmp(Name, "scalemode") == 0) {
+			ScreenScaleMode = SDL_atoi(Value);
+			if (ScreenScaleMode > 2) ScreenScaleMode = 2;
+		} else if (SDL_strcasecmp(Name, "viewsize") == 0) {
+			GameViewSize = SDL_atoi(Value);
+			if (GameViewSize > 3) GameViewSize = 3;
+		} else if (SDL_strcasecmp(Name, "filter") == 0) {
+			ScreenFilter = StrToBool(Value);
 		}
 	} else if (SDL_strcasecmp(Section, "keys") == 0) {
 		for (i = 0; i < ARRAYLEN(KeyBinds); i++) {
@@ -1198,6 +1264,8 @@ void LoadPrefs(void)
 	SlowDown = TRUE;			/* Enable speed governor */
 	GameViewSize = 3;			/* 640 mode screen */
 	difficulty = 2;				/* Medium difficulty */
+	ScreenScaleMode = 0;
+	ScreenFilter = 0;
 
 	Storage = PrefStorage();
 	if (!Storage)
@@ -1231,14 +1299,24 @@ void SavePrefs(void)
 	if (!Storage)
 		return;
 	B += snprintf(B, End - B, "[Main]\n");
-	B += snprintf(B, End - B, "State = %d\n", SystemState);
 	B += snprintf(B, End - B, "Mouse = %d\n", MouseEnabled);
 	B += snprintf(B, End - B, "Governor = %d\n", SlowDown);
-	B += snprintf(B, End - B, "ViewSize = %d\n", GameViewSize);
 	B += snprintf(B, End - B, "Difficulty = %d\n", difficulty);
+	B += snprintf(B, End - B, "\n");
+	B += snprintf(B, End - B, "[Audio]\n");
+	B += snprintf(B, End - B, "Sfx = %d\n", !!(SystemState & SfxActive));
+	B += snprintf(B, End - B, "Music = %d\n", !!(SystemState & MusicActive));
+	B += snprintf(B, End - B, "\n");
+	B += snprintf(B, End - B, "[Video]\n");
+	B += snprintf(B, End - B, "ViewSize = %d\n", GameViewSize);
+	B += snprintf(B, End - B, "FullScreen = %d\n", FullScreen);
+	B += snprintf(B, End - B, "ScaleMode = %d\n", ScreenScaleMode);
+	B += snprintf(B, End - B, "Filter = %d\n", ScreenFilter);
+	B += snprintf(B, End - B, "\n");
 	B += snprintf(B, End - B, "[Keys]\n");
 	for (i = 0; i < ARRAYLEN(KeyBinds); i++)
 		B += snprintf(B, End - B, "%s = %s\n", KeyPrefNames[i], SDL_GetScancodeName(KeyBinds[11-i]));
+	B += snprintf(B, End - B, "\n");
 	SDL_WriteStorageFile(Storage, PrefsFile, Buf, B - Buf);
 }
 

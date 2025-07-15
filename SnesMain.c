@@ -252,7 +252,7 @@ int main()
 		if (playstate == EX_NEWGAME || ChooseGameDiff()) {	/* Choose your difficulty */
 			playstate = EX_NEWGAME;	/* Start a new game */
 			do {
-				FadeToBlack();		/* Fade the screen */
+				//FadeToBlack();		/* Fade the screen */
 				StartGame();		/* Play the game */
 			} while (playstate == EX_LOADGAME || playstate == EX_NEWGAME);
 		} else {

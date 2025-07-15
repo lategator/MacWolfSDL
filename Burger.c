@@ -7,6 +7,7 @@
 **********************************/
 
 #include "Burger.h"
+#include "SDLWolf.h"
 #include "WolfDef.h"		/* Get the prototypes */
 #include <string.h>
 #include <SDL3/SDL.h>
@@ -24,6 +25,9 @@ extern unsigned char MacFont[];
 unsigned char *VideoPointer;	/* Pointer to video memory */
 Word VideoWidth;				/* Width to each video scan line */
 Word SystemState=3;				/* Sound on/off flags */
+Boolean FullScreen=0;			/* Fullscreen toggle */
+Byte ScreenScaleMode=0;			/* Scale/stretch select */
+Boolean ScreenFilter=0;			/* Scale/stretch select */
 Word KilledSong;				/* Song that's currently playing */
 LongWord LastTick;				/* Last system tick (60hz) */
 Word FontX;						/* X Coord of font */
@@ -515,36 +519,13 @@ void ShowPic(Word PicNum)
 
 void ClearTheScreen(Word Color)
 {
-	Word x,y;
-	unsigned char *TempPtr;
+	SDL_Palette *Palette;
+	Uint8 R=0,G=0,B=0;
 
-	TempPtr = VideoPointer;
-	y = SCREENHEIGHT;		/* 200 lines high */
-	do {
-		x = 0;
-		do {
-			TempPtr[x] = Color;	/* Fill color */
-		} while (++x<SCREENWIDTH);
-		TempPtr += VideoWidth;	/* Next line down */
-	} while (--y);
-}
-
-void FillRect(const Rect *R, Word Color)
-{
-	int x,y,w,h;
-	unsigned char *TempPtr;
-
-	w = (R->right > SCREENWIDTH ? SCREENWIDTH : R->right) - (R->left > 0 ? R->left : 0);
-	h = (R->bottom > SCREENHEIGHT ? SCREENHEIGHT : R->bottom) - (R->top > 0 ? R->top : 0);
-	if (w <= 0 || h <= 0 || R->left >= SCREENWIDTH || R->top >= SCREENHEIGHT)
-		return;
-	TempPtr = &VideoPointer[YTable[R->top]+R->left];
-	for (y = 0; y < h; y++) {
-		for (x = 0; x < w; x++) {
-			TempPtr[x] = Color;	/* Fill color */
-		}
-		TempPtr += VideoWidth;	/* Next line down */
-	}
+	Palette = SDL_GetSurfacePalette(CurrentSurface);
+	if (Palette)
+		SDL_GetRGB(Color, SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_INDEX8), Palette, &R, &G, &B);
+	SDL_ClearSurface(CurrentSurface, R/255.f, G/255.f, B/255.f, 1);
 }
 
 /**********************************
@@ -559,7 +540,7 @@ void DrawAString(const char *TextPtr)
 	while (TextPtr[0]) {				/* At the end of the string? */
 		if (TextPtr[0] == '\n') {
 			FontX = X;
-			FontY += 18;
+			FontY += 14;
 		} else {
 			DrawAChar(TextPtr[0]);	/* Draw the char */
 		}

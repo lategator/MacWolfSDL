@@ -5,8 +5,8 @@
 #include <ctype.h>
 
 typedef enum {
-	WS_NORMAL,
-	WS_SELECTED,
+	WS_SELECTED = 1,
+	WS_FOCUSED = 2,
 } widgetstate_t;
 
 typedef struct widgetclass_t widgetclass_t;
@@ -68,16 +68,17 @@ static inline void DrawDropShadow(const Rect *R)
 	SDL_SetRenderDrawBlendMode(SdlRenderer, SDL_BLENDMODE_NONE);
 }
 
-static void RenderWidgets(widget_t *Widgets, int N, int Selected, void *Data)
+static void RenderWidgets(widget_t *Widgets, int N, int Selected, int Focused, void *Data)
 {
 	widgetstate_t State;
 	int Index;
 	for (Index = 0; Index < N; Index++, Widgets++) {
 		if (Widgets->class_->render) {
+			State = 0;
 			if (Index == Selected)
-				State = WS_SELECTED;
-			else
-				State = WS_NORMAL;
+				State |= WS_SELECTED;
+			if (Index == Focused)
+				State |= WS_FOCUSED;
 			Widgets->class_->render(Widgets, State, Data);
 		}
 	}
@@ -117,9 +118,13 @@ typedef struct {
 static void ButtonRender(widget_t *Widget, widgetstate_t State, void *Data)
 {
 	DrawFilledFrame(&Widget->rect);
-	if (State != WS_NORMAL)
+	if (State & WS_FOCUSED)
 		SDL_RenderRects(SdlRenderer, (SDL_FRect[3]){
 			FRectShrink(&Widget->rect, -2), FRectShrink(&Widget->rect, -3), FRectShrink(&Widget->rect, -4)}, 3);
+	if (State & WS_SELECTED) {
+		SDL_SetRenderDrawColor(SdlRenderer, 0, 255, 255, 255);
+		SDL_RenderFillRect(SdlRenderer, &FRectShrink(&Widget->rect, 2));
+	}
 	if (Widget->ptr) {
 		FontSetColor(BLACK);
 		FontSetClip(&Widget->rect);
@@ -128,9 +133,30 @@ static void ButtonRender(widget_t *Widget, widgetstate_t State, void *Data)
 	}
 }
 
+static void CheckBoxRender(widget_t *Widget, widgetstate_t State, void *Data)
+{
+	Rect *R = &Widget->rect;
+	Rect Box ={R->top+1, R->left, R->top+13, R->left+12};
+
+	DrawFilledFrame(&Box);
+	if (State & WS_FOCUSED)
+		SDL_RenderRects(SdlRenderer, (SDL_FRect[3]){
+			FRectShrink(&Box, -2), FRectShrink(&Box, -3), FRectShrink(&Box, -4)}, 3);
+	if (State & WS_SELECTED) {
+		SDL_RenderLine(SdlRenderer, Box.left, Box.top, Box.right-1, Box.bottom-1);
+		SDL_RenderLine(SdlRenderer, Box.left, Box.bottom-1, Box.right-1, Box.top);
+	}
+	if (Widget->ptr) {
+		FontSetColor(BLACK);
+		FontSetClip(&Widget->rect);
+		SetFontXY(Widget->rect.left + 17, Widget->rect.top);
+		DrawAString(Widget->ptr);
+	}
+}
+
 static void TextEntryRender(widget_t *Widget, widgetstate_t State, void *Data)
 {
-	if (State != WS_NORMAL) {
+	if (State & WS_SELECTED) {
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 255, 255, 255);
 		SDL_RenderFillRect(SdlRenderer, &FRect(&Widget->rect));
 	}
@@ -146,12 +172,12 @@ static void MenuBarItemRender(widget_t *Widget, widgetstate_t State, void *Data)
 {
 	menu_t *Menu = Widget->ptr;
 
-	if (State == WS_SELECTED) {
+	if (State & WS_SELECTED) {
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 		SDL_RenderFillRect(SdlRenderer,&FRect(&Widget->rect));
 		DrawFilledFrame(&Menu->rect);
 		DrawDropShadow(&Menu->rect);
-		RenderWidgets(Menu->entries, Menu->n_entries, Menu->selected, Data);
+		RenderWidgets(Menu->entries, Menu->n_entries, Menu->selected, -1, Data);
 		FontSetColor(WHITE2);
 	} else {
 		FontSetColor(BLACK);
@@ -167,12 +193,12 @@ static void MenuItemRender(widget_t *Widget, widgetstate_t State, void *Data)
 	short X = Widget->rect.left;
 	short Y = Widget->rect.top;
 
-	if (State == WS_SELECTED) {
+	if (State & WS_SELECTED) {
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 		SDL_RenderFillRect(SdlRenderer,&FRect(&Widget->rect));
 	}
 	if (Item->getvalue && Item->getvalue(Widget, Data)) {
-		if (State == WS_SELECTED)
+		if (State & WS_SELECTED)
 			SDL_SetRenderDrawColor(SdlRenderer, 255, 255, 255, 255);
 		else
 			SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
@@ -181,7 +207,7 @@ static void MenuItemRender(widget_t *Widget, widgetstate_t State, void *Data)
 				{X+3, Y+8+y}, {X+5, Y+10+y}, {X+11, Y+4+y},
 			}, 3);
 	}
-	FontSetColor(State == WS_SELECTED ? WHITE2 : BLACK);
+	FontSetColor(State & WS_SELECTED ? WHITE2 : BLACK);
 	FontSetClip(&Widget->rect);
 	SetFontXY(X + 15, Y + 1);
 	DrawAString(Item->name);
@@ -297,6 +323,7 @@ static void VScrollBarClick(widget_t *Widget, short X, short Y, void *Data)
 }
 
 static widgetclass_t ButtonClass = { ButtonRender, NULL };
+static widgetclass_t CheckBoxClass = { CheckBoxRender, NULL };
 static widgetclass_t TextEntryClass = { TextEntryRender, NULL };
 static widgetclass_t MenuBarItemClass = { MenuBarItemRender, NULL };
 static widgetclass_t MenuItemClass = { MenuItemRender, NULL };
@@ -366,11 +393,12 @@ static void DrawScenarioList(void)
 	SDL_FRect FR;
 	SDL_Surface *ScenarioPic = NULL;
 
+	if (MenuBG)
+		BlitSurface(MenuBG, NULL);
 	if (ScenarioCount)
 		ScenarioPic = Scenarios[MenuPosY].pic;
 	if (ScenarioPic)
 		BlitSurface(ScenarioPic, &(SDL_Rect){231, 17, 96, 64});
-
 	StartUIOverlay();
 	if (!ScenarioPic) {
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
@@ -393,7 +421,7 @@ static void DrawScenarioList(void)
 		DrawAString(Scenarios[i].name);
 		Y += 16;
 	}
-	RenderWidgets(ScenarioWidgets, 2, -1, NULL);
+	RenderWidgets(ScenarioWidgets, 2, -1, -1, NULL);
 	if (ScenarioCount) {
 		FR.x = ScenarioListRect.left+1;
 		FR.y = ScenarioListRect.top + (MenuPosY - MenuScrollY) * 16;
@@ -428,10 +456,8 @@ Word ChooseScenario(void)
 	MenuScrollY = MenuPosY >= ScenariosItemHeight ? MenuPosY - ScenariosItemHeight + 1 : MenuPosY;
 	ResizeGameWindow(369, 331);
 	ClearTheScreen(WHITE);
-	BlitScreen();
+	ClearFrameBuffer();
 	MenuBG = LoadPict(MainResources, 129);
-	if (MenuBG)
-		BlitSurface(MenuBG, NULL);
 	DrawScenarioList();
 	ReadMenuJoystick();
 	for (;;) {
@@ -597,6 +623,7 @@ TryIt:
 	MenuScrollY = MenuPosY = difficulty;
 	ResizeGameWindow(369, 331);
 	ClearTheScreen(WHITE);
+	ClearFrameBuffer();
 	MenuBG = LoadPict(MainResources, 128);
 	DrawGameDiff();
 	ReadMenuJoystick();
@@ -649,8 +676,8 @@ TryIt:
 
 	difficulty = MenuPosY;
 	if (ScenarioPath) {
-		ClearTheScreen(BLACK);
-		BlitScreen();
+		ClearFrameBuffer();
+		RenderScreen();
 		RetVal = MountMapFile(ScenarioPath);
 		LoadMapSetData();
 		SDL_free(ScenarioPath);
@@ -659,6 +686,7 @@ TryIt:
 	return RetVal;
 }
 
+static Boolean GetFullScreen() { return FullScreen; }
 static Boolean GetSoundEnabled() { return (SystemState & SfxActive) != 0; }
 static Boolean GetMusicEnabled() { return (SystemState & MusicActive) != 0; }
 static Boolean GetMouseEnabled() { return MouseEnabled; }
@@ -675,15 +703,16 @@ static widget_t MenuBar[2] = {
 			{&MenuSeparatorClass, {100, 13, 116, 144}},
 			{&MenuItemClass, {116, 13, 132, 144}, &(menuitem_t){"Quit"}},
 		}, 7, {19, 12, 133, 145}, -1}},
-	{&MenuBarItemClass, {1, 53, 19, 120},&(menu_t) {"Options", (widget_t[7]){
-			{&MenuItemClass, {20, 54, 36, 233}, &(menuitem_t){"Sound", GetSoundEnabled}},
-			{&MenuItemClass, {36, 54, 52, 233}, &(menuitem_t){"Music", GetMusicEnabled}},
-			{&MenuItemClass, {52, 54, 68, 233}, &(menuitem_t){"Set Screen size..."}},
-			{&MenuItemClass, {68, 54, 84, 233}, &(menuitem_t){"Speed Governor", GetSlowDown}},
-			{&MenuItemClass, {84, 54, 100, 233}, &(menuitem_t){"Mouse Control", GetMouseEnabled}},
-			{&MenuItemClass, {100, 54, 116, 233}, &(menuitem_t){"Pause", GetPaused}},
-			{&MenuItemClass, {116, 54, 132, 233}, &(menuitem_t){"Configure Keyboard"}},
-	}, 7, {19, 53, 133, 234}, -1}},
+	{&MenuBarItemClass, {1, 53, 19, 120},&(menu_t) {"Options", (widget_t[8]){
+			{&MenuItemClass, {20, 54, 36, 233}, &(menuitem_t){"Full Screen", GetFullScreen}},
+			{&MenuItemClass, {36, 54, 52, 233}, &(menuitem_t){"Sound", GetSoundEnabled}},
+			{&MenuItemClass, {52, 54, 68, 233}, &(menuitem_t){"Music", GetMusicEnabled}},
+			{&MenuItemClass, {68, 54, 84, 233}, &(menuitem_t){"Set Screen size..."}},
+			{&MenuItemClass, {84, 54, 100, 233}, &(menuitem_t){"Speed Governor", GetSlowDown}},
+			{&MenuItemClass, {100, 54, 116, 233}, &(menuitem_t){"Mouse Control", GetMouseEnabled}},
+			{&MenuItemClass, {116, 54, 132, 233}, &(menuitem_t){"Pause", GetPaused}},
+			{&MenuItemClass, {132, 54, 148, 233}, &(menuitem_t){"Configure Keyboard"}},
+	}, 8, {19, 53, 149, 234}, -1}},
 };
 
 void DrawMainMenu(int SelectedMenu)
@@ -692,7 +721,7 @@ void DrawMainMenu(int SelectedMenu)
 	SDL_RenderFillRect(SdlRenderer,&(SDL_FRect){0, 0, SCREENWIDTH, 19});
 	SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 	SDL_RenderLine(SdlRenderer, 0, 19, SCREENWIDTH, 19);
-	RenderWidgets(MenuBar, 2, SelectedMenu, NULL);
+	RenderWidgets(MenuBar, 2, SelectedMenu, -1, NULL);
 }
 
 int DoMenuCommand(int Menu, int Item)
@@ -731,12 +760,18 @@ int DoMenuCommand(int Menu, int Item)
 	case 1:
 		switch (Item) {
 		case 0:
+			FullScreen^=1;
+			SDL_SetWindowFullscreen(SdlWindow, FullScreen);
+			UpdateVideoSettings();
+			RenderScreen();
+			break;
+		case 1:
 			SystemState^=SfxActive;				/* Sound on/off flags */
 			if (!(SystemState&SfxActive)) {
 				PlaySound(0);			/* Turn off all existing sounds */
 			}
 			break;
-		case 1:
+		case 2:
 			SystemState^=MusicActive;			/* Music on/off flags */
 			if (SystemState&MusicActive) {
 				PlaySong(KilledSong);		/* Restart the music */
@@ -744,17 +779,17 @@ int DoMenuCommand(int Menu, int Item)
 				PlaySong(0);	/* Shut down the music */
 			}
 			break;
-		case 2:
-			return -3;
 		case 3:
+			return -3;
+		case 4:
 			SlowDown^=1;		/* Toggle the slow down flag */
 			break;
-		case 4:
+		case 5:
 			MouseEnabled = (!MouseEnabled);	/* Toggle the cursor */
 			break;
-		case 5:			/* Unpause */
+		case 6:			/* Unpause */
 			return -1;
-		case 6:			/* Keyboard control window */
+		case 7:			/* Keyboard control window */
 			return -4;
 		}
 		SavePrefs();
@@ -764,27 +799,52 @@ int DoMenuCommand(int Menu, int Item)
 }
 
 static const Rect VideoDialogRect = {0, 0, 166, 318};
-static const Rect ScreenButtonRect = {64, 50, 84, 138};
+static const Rect ScreenButtonRect = {0, 0, 20, 88};
+static const Rect ScreenFilterRect = {0, 0, 14, 88};
+static const Rect ScreenDoneRect = {0, 0, 20, 50};
 
-static widget_t ScreenSizeButtons[4] = {
+static widget_t ScreenButtons[9] = {
 	{&ButtonClass, {}, "320 x 200"},
 	{&ButtonClass, {}, "512 x 384"},
 	{&ButtonClass, {}, "640 x 400"},
 	{&ButtonClass, {}, "640 x 480"},
+	{&ButtonClass, {}, "Integer"},
+	{&ButtonClass, {}, "Scale"},
+	{&ButtonClass, {}, "Stretch"},
+	{&CheckBoxClass, {}, "Filtering"},
+	{&ButtonClass, {}, "Done"},
 };
+
 
 static void InitVideoDialog(void)
 {
 	int X, Y;
 
-	X = (SCREENWIDTH-VideoDialogRect.right)/2;
-	Y = (SCREENHEIGHT-VideoDialogRect.bottom)/2;
+	X = (SCREENWIDTH-VideoDialogRect.right)/2+50;
+	Y = (SCREENHEIGHT-VideoDialogRect.bottom)/2+50;
 	MenuScrollY = MenuPosY = GameViewSize;
 
-	ScreenSizeButtons[0].rect = RectOff(&ScreenButtonRect, X,	 Y);
-	ScreenSizeButtons[1].rect = RectOff(&ScreenButtonRect, X+124, Y);
-	ScreenSizeButtons[2].rect = RectOff(&ScreenButtonRect, X,	 Y+36);
-	ScreenSizeButtons[3].rect = RectOff(&ScreenButtonRect, X+124, Y+36);
+	ScreenButtons[0].rect = RectOff(&ScreenButtonRect, X,	 Y);
+	ScreenButtons[1].rect = RectOff(&ScreenButtonRect, X+124, Y);
+	ScreenButtons[2].rect = RectOff(&ScreenButtonRect, X,	 Y+26);
+	ScreenButtons[3].rect = RectOff(&ScreenButtonRect, X+124, Y+26);
+
+	X -= 24;
+	Y += 60;
+
+	ScreenButtons[4].rect = RectOff(&ScreenButtonRect, X,	 Y);
+	ScreenButtons[5].rect = RectOff(&ScreenButtonRect, X+94, Y);
+	ScreenButtons[6].rect = RectOff(&ScreenButtonRect, X+188, Y);
+
+	X += 24;
+	Y += 30;
+
+	ScreenButtons[7].rect = RectOff(&ScreenFilterRect, X, Y);
+
+	X += 180;
+	Y -= 3;
+
+	ScreenButtons[8].rect = RectOff(&ScreenDoneRect, X, Y);
 }
 
 static int RunVideoDialog(int Click, Boolean Moved)
@@ -794,16 +854,41 @@ static int RunVideoDialog(int Click, Boolean Moved)
 
 	if (Click == 3 || (joystick1 & JOYPAD_B))
 		return -1;
-	if (joystick1 & JOYPAD_UP)
-		MenuScrollY = MenuPosY & 1;
-	if (joystick1 & JOYPAD_DN)
-		MenuScrollY = MenuPosY | 2;
-	if (joystick1 & JOYPAD_LFT)
-		MenuScrollY = MenuPosY & 2;
-	if (joystick1 & JOYPAD_RGT)
-		MenuScrollY = MenuPosY | 1;
+	if (MenuPosY < 4) {
+		if (joystick1 & JOYPAD_UP)
+			MenuScrollY = MenuPosY & 1;
+		if (joystick1 & JOYPAD_LFT)
+			MenuScrollY = MenuPosY & 2;
+		if (joystick1 & JOYPAD_RGT)
+			MenuScrollY = MenuPosY | 1;
+		if (joystick1 & JOYPAD_DN) {
+			if (MenuPosY < 2)
+				MenuScrollY = MenuPosY | 2;
+			else
+				MenuScrollY = ScreenScaleMode + 4;
+		}
+	} else if (MenuPosY >= 4 && MenuPosY < 7) {
+		if ((joystick1 & JOYPAD_LFT) && MenuPosY > 4)
+			MenuScrollY = MenuPosY - 1;
+		if ((joystick1 & JOYPAD_RGT) && MenuPosY < 6)
+			MenuScrollY = MenuPosY + 1;
+		if (joystick1 & JOYPAD_UP)
+			MenuScrollY = GameViewSize;
+		else if (joystick1 & JOYPAD_DN)
+			MenuScrollY = 7;
+	} else if (MenuPosY == 7) {
+		if (joystick1 & JOYPAD_UP)
+			MenuScrollY = ScreenScaleMode + 4;
+		if (joystick1 & JOYPAD_RGT)
+			MenuScrollY = 8;
+	} else if (MenuPosY == 8) {
+		if (joystick1 & JOYPAD_UP)
+			MenuScrollY = ScreenScaleMode + 4;
+		if (joystick1 & JOYPAD_LFT)
+			MenuScrollY = 7;
+	}
 	if (Moved || Click == 1) {
-		i = ClickWidgets(ScreenSizeButtons, 4, mousex, mousey, NULL);
+		i = ClickWidgets(ScreenButtons, 9, mousex, mousey, NULL);
 		if (i >= 0) {
 			MenuScrollY = i;
 			if (Click == 1)
@@ -812,7 +897,7 @@ static int RunVideoDialog(int Click, Boolean Moved)
 	}
 	if (joystick1 & JOYPAD_A)
 		Selected = MenuScrollY;
-	if (Selected >= 0) {
+	if (Selected >= 0 && Selected < 4) {
 		if (GameViewSize!=Selected) {		/* Did you change the size? */
 			GameViewSize = Selected;		/* Set the new size */
 			if (playstate==EX_STILLPLAYING || playstate==EX_AUTOMAP) {
@@ -832,12 +917,24 @@ TryIt:
 				RenderView();
 			}
 			SavePrefs();
+			return 1;
 		}
+	} else if (Selected >= 4 && Selected < 7)  {
+		if (ScreenScaleMode != Selected-4) {
+			ScreenScaleMode = Selected-4;
+			UpdateVideoSettings();
+			SavePrefs();
+			return 1;
+		}
+	} else if (Selected == 7) {
+		ScreenFilter ^= 1;
+		UpdateVideoSettings();
+		SavePrefs();
+		return 1;
+	} else if (Selected == 8)
 		return -1;
-	}
 	if (MenuScrollY != MenuPosY) {
 		MenuPosY = MenuScrollY;
-		return 1;
 	}
 	return 0;
 }
@@ -853,9 +950,12 @@ static void DrawVideoDialog(void)
 	DrawDropShadow(&RectOff(&VideoDialogRect, X, Y));
 	FontSetColor(BLACK);
 	FontSetClip(NULL);
-	SetFontXY(X+51, Y+16);
+	SetFontXY(X+51, Y+8);
 	DrawAString("What screen size shall you conquer\nthe castle with?");
-	RenderWidgets(ScreenSizeButtons, 4, MenuPosY, NULL);
+	RenderWidgets(&ScreenButtons[0], 4, GameViewSize, MenuPosY, NULL);
+	RenderWidgets(&ScreenButtons[4], 3, ScreenScaleMode, MenuPosY-4, NULL);
+	RenderWidgets(&ScreenButtons[7], 1, (int)ScreenFilter-1, MenuPosY-7, NULL);
+	RenderWidgets(&ScreenButtons[8], 1, -1, MenuPosY-8, NULL);
 }
 
 static const Rect KeyboardDialogRect = {0, 0, 216, 306};
@@ -955,10 +1055,10 @@ static void DrawKeyboardDialog(void)
 		SetFontXY(KeyButtonRect.left+X-110, KeyButtonRect.top+Y+i*16+1);
 		DrawAString(KeyNames[i]);
 	}
-	RenderWidgets(KeyButtons, 12, MenuPosY, NULL);
+	RenderWidgets(KeyButtons, 12, MenuPosY, -1, NULL);
 	SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 	SDL_RenderRect(SdlRenderer,&FRect(&RectOff(&KeysFrameRect, X, Y)));
-	RenderWidgets(KeyOkCancelButtons, 2, MenuPosY-12, NULL);
+	RenderWidgets(KeyOkCancelButtons, 2, 1, MenuPosY-12, NULL);
 }
 
 static int GetAKey(void)
@@ -1161,6 +1261,7 @@ exit_t PauseMenu(Boolean Shape)
 		}
 		if (Redraw) {
 		Draw:
+			BlitScreen();
 			StartUIOverlay();
 			switch (OpenDialog) {
 				case 0: DrawMainMenu(SelectedMenu); break;

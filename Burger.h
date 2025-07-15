@@ -44,6 +44,9 @@ extern unsigned char *VideoPointer;
 //extern Word ScanCode;
 extern Word KilledSong;
 extern Word SystemState;
+extern Boolean FullScreen;
+extern Byte ScreenScaleMode;
+extern Boolean ScreenFilter;
 extern Word VideoWidth;
 extern LongWord LastTick;
 extern LongWord YTable[480];
@@ -82,7 +85,6 @@ void StopSound(Word SndNum);
 void PlaySong(Word SongNum);
 
 void ClearTheScreen(Word Color);
-void FillRect(const Rect *R, Word Color);
 void ShowPic(Word PicNum);
 
 void InitYTable(void);
