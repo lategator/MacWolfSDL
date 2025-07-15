@@ -3,6 +3,7 @@
 #include "WolfDef.h"
 #include "ini.h"
 #include <stdlib.h>
+#include <fluidsynth.h>
 #include <err.h>
 
 static const char *PrefOrg = NULL;
@@ -29,13 +30,22 @@ static SDL_Surface *UIOverlay = NULL;
 static SDL_Palette *SdlPalette = NULL;
 static SDL_AudioDeviceID SdlAudioDevice = 0;
 static SDL_AudioStream *SdlSfxChannels[NAUDIOCHANS] = { NULL };
+static SDL_AudioStream *SdlMusicStream;
+static fluid_settings_t *FluidSettings;
+fluid_synth_t *FluidSynth;
+static fluid_player_t *FluidPlayer;
+static Byte *MusicBuffer = NULL;
+static LongWord MusicBufferFrames = 0;
 static Word SdlSfxNums[NAUDIOCHANS];
 static Byte *GameShapeBuffer = NULL;
 static char *MyPrefPath = NULL;
 extern int SelectedMenu;
 char *SaveFileName = NULL;
 
-Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt);
+static void CloseAudio(void);
+static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt);
+void MacLoadSoundFont(void);
+static void ProcessMusic(void *User, SDL_AudioStream *Stream, int Needed, int Total);
 
 void InitTools(void)
 {
@@ -43,9 +53,18 @@ void InitTools(void)
 		errx(1, "SDL_Init");
 	SDL_SetAppMetadata("Wolfenstein 3D", "1.0", "wolf3dsnes");
 	LoadPrefs();
+	fluid_set_log_function(FLUID_PANIC, BailOut, NULL);
+	fluid_set_log_function(FLUID_ERR, NULL, NULL);
+	fluid_set_log_function(FLUID_WARN, NULL, NULL);
+	fluid_set_log_function(FLUID_INFO, NULL, NULL);
+	FluidSettings = new_fluid_settings();
+	if (FluidSettings) {
+		FluidSynth = new_fluid_synth(FluidSettings);
+	}
 	ChangeAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
 	InitResources();
 	GetTableMemory();
+	MacLoadSoundFont();
 	LoadMapSetData();
 	NewGameWindow(2);				/* Create a game window at 512x384 */
 	ClearTheScreen(BLACK);			/* Force the offscreen memory blank */
@@ -63,14 +82,14 @@ const char *PrefPath(void)
 
 SDL_Storage *PrefStorage(void)
 {
-    SDL_Storage *Storage;
+	SDL_Storage *Storage;
 
 	Storage = SDL_OpenUserStorage(PrefOrg, PrefApp, 0);
 	if (!Storage)
 		return NULL;
-    while (!SDL_StorageReady(Storage)) {
-        SDL_Delay(1);
-    }
+	while (!SDL_StorageReady(Storage)) {
+		SDL_Delay(1);
+	}
 	return Storage;
 }
 
@@ -103,8 +122,15 @@ void SetAPalettePtr(unsigned char *PalPtr)
 	SetPalette(SdlPalette, PalPtr);
 }
 
-void GoodBye(void)
+void GoodBye()
 {
+	CloseAudio();
+	if (FluidPlayer)
+		delete_fluid_player(FluidPlayer);
+	if (FluidSynth)
+		delete_fluid_synth(FluidSynth);
+	if (FluidSettings)
+		delete_fluid_settings(FluidSettings);
 	if (SdlSurface)
 		SDL_DestroySurface(SdlSurface);
 	if (UIOverlay)
@@ -127,7 +153,7 @@ void GoodBye(void)
 	exit(0);
 }
 
-void BailOut(void)
+void BailOut()
 {
 	GoodBye();				/* Bail out! */
 }
@@ -181,7 +207,7 @@ void BlastScreen(void)
 
 void BlastScreen2(Rect *BlastRect)
 {
-  BlastScreen();
+	BlastScreen();
 }
 
 /**********************************
@@ -948,7 +974,8 @@ Boolean ChooseSaveGame(void)
 	return DialogCancel;
 }
 
-static Boolean StrToBool(const char *value) {
+static Boolean StrToBool(const char *value)
+{
 	return SDL_strcasecmp(value, "true") == 0
 		|| SDL_strcasecmp(value, "1") == 0;
 }
@@ -1049,15 +1076,32 @@ void SavePrefs(void)
 
 **********************************/
 
-static void CloseAudio(void);
+static void ProcessMusic(void *User, SDL_AudioStream *Stream, int Needed, int Total)
+{
+	int FramesLeft, n;
 
-Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt)
+	FramesLeft = (Needed + (2 * sizeof(int16_t))-1) / (2 * sizeof(int16_t));
+	while (FramesLeft > 0) {
+		n = FramesLeft < MusicBufferFrames ? FramesLeft : MusicBufferFrames;
+		fluid_synth_write_s16(FluidSynth, n, MusicBuffer, 0, 2, MusicBuffer, 1, 2);
+		SDL_PutAudioStreamData(Stream, MusicBuffer, n * (2 * sizeof(int16_t)));
+		FramesLeft -= n;
+	}
+}
+
+static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt)
 {
 	SDL_AudioSpec RealFmt;
+	int BufSize;
 	static const SDL_AudioSpec MacSndFmt = {
 		.format = SDL_AUDIO_U8,
 		.channels = 1,
 		.freq = 22254,
+	};
+	static const SDL_AudioSpec MusicFmt = {
+		.format = SDL_AUDIO_S16,
+		.channels = 2,
+		.freq = 44100,
 	};
 
 	if (ID == SdlAudioDevice)
@@ -1067,8 +1111,16 @@ Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt)
 	SdlAudioDevice = SDL_OpenAudioDevice(ID, Fmt);
 	if (!SdlAudioDevice)
 		return FALSE;
-	if (!SDL_GetAudioDeviceFormat(SdlAudioDevice, &RealFmt, NULL))
+	if (!SDL_GetAudioDeviceFormat(SdlAudioDevice, &RealFmt, &BufSize))
 		goto Fail;
+	SdlMusicStream = SDL_CreateAudioStream(&MusicFmt, &RealFmt);
+	if (!SdlMusicStream)
+		goto Fail;
+if (FluidSynth) {
+		MusicBufferFrames = (LongWord)BufSize * 2;
+		MusicBuffer = SDL_malloc(MusicBufferFrames * 2 * sizeof(int16_t));
+		if (!MusicBuffer) err(1, "malloc");
+	}
 	for (int i = 0; i < NAUDIOCHANS; i++) {
 		SdlSfxNums[i] = -1;
 		SdlSfxChannels[i] = SDL_CreateAudioStream(&MacSndFmt, &RealFmt);
@@ -1076,17 +1128,15 @@ Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt)
 			goto Fail;
 	}
 
+	if (!SDL_BindAudioStream(SdlAudioDevice, SdlMusicStream))
+		goto Fail;
 	if (!SDL_BindAudioStreams(SdlAudioDevice, SdlSfxChannels, NAUDIOCHANS))
 		goto Fail;
 	if (!SDL_ResumeAudioDevice(SdlAudioDevice))
 		goto Fail;
 	return TRUE;
 Fail:
-	for (int i = 0; i < NAUDIOCHANS; i++) {
-		if (SdlSfxChannels[i])
-			SDL_DestroyAudioStream(SdlSfxChannels[i]);
-	}
-	SDL_CloseAudioDevice(SdlAudioDevice);
+	CloseAudio();
 	return FALSE;
 }
 
@@ -1094,6 +1144,10 @@ static void CloseAudio(void)
 {
 	if (SdlAudioDevice) {
 		SDL_PauseAudioDevice(SdlAudioDevice);
+		if (SdlMusicStream) {
+			SDL_DestroyAudioStream(SdlMusicStream);
+			SdlMusicStream = NULL;
+		}
 		for (int i = 0; i < NAUDIOCHANS; i++) {
 			if (SdlSfxChannels[i])
 				SDL_DestroyAudioStream(SdlSfxChannels[i]);
@@ -1103,15 +1157,77 @@ static void CloseAudio(void)
 		SDL_CloseAudioDevice(SdlAudioDevice);
 		SdlAudioDevice = 0;
 	}
+	if (MusicBuffer) {
+		SDL_free(MusicBuffer);
+		MusicBuffer = NULL;
+		MusicBufferFrames = 0;
+	}
 }
 
-void BeginSound(Word SoundNum) {
+void PauseSoundMusicSystem(void)
+{
+	if (!SdlAudioDevice)
+		return;
+	if (FluidPlayer)
+		fluid_player_stop(FluidPlayer);
+	SDL_PauseAudioDevice(SdlAudioDevice);
+	EndAllSound();
+}
+
+void ResumeSoundMusicSystem(void)
+{
+	if (!SdlAudioDevice)
+		return;
+	if (FluidPlayer && fluid_player_get_status(FluidPlayer) != FLUID_PLAYER_PLAYING)
+		fluid_player_play(FluidPlayer);
+	SDL_ResumeAudioDevice(SdlAudioDevice);
+}
+
+void BeginSongLooped(Word Song)
+{
+	Byte *Data;
+	LongWord Len;
+
+	if (!FluidSynth)
+		return;
+	if (FluidPlayer) {
+		SDL_SetAudioStreamGetCallback(SdlMusicStream, NULL, NULL);
+		delete_fluid_player(FluidPlayer);
+		FluidPlayer = NULL;
+	}
+	fluid_synth_system_reset(FluidSynth);
+	Data = LoadSong(Song, &Len);
+	if (!Data)
+		return;
+	FluidPlayer = new_fluid_player(FluidSynth);
+	if (FluidPlayer) {
+		if (fluid_player_add_mem(FluidPlayer, Data, Len) != FLUID_FAILED) {
+			fluid_player_set_loop(FluidPlayer, -1);
+			fluid_player_play(FluidPlayer);
+			SDL_SetAudioStreamGetCallback(SdlMusicStream, ProcessMusic, NULL);
+		}
+	}
+	SDL_free(Data);
+}
+
+void EndSong()
+{
+	if (!FluidPlayer || !SdlAudioDevice)
+		return;
+	SDL_SetAudioStreamGetCallback(SdlMusicStream, NULL, NULL);
+	delete_fluid_player(FluidPlayer);
+	fluid_synth_system_reset(FluidSynth);
+	FluidPlayer = NULL;
+}
+
+void BeginSound(Word SoundNum)
+{
 	int i, Samples, Chan = 0, MinSamples = 0x7FFFFFFF;
 	Sound *Snd;
 
 	if (!SdlAudioDevice || SDL_AudioDevicePaused(SdlAudioDevice))
 		return;
-	Snd = LoadSound(SoundNum);
+	Snd = LoadCachedSound(SoundNum);
 	if (!Snd)
 		return;
 	for (i = 0; i < NAUDIOCHANS; i++) {
@@ -1131,9 +1247,14 @@ void BeginSound(Word SoundNum) {
 	}
 	SDL_ClearAudioStream(SdlSfxChannels[Chan]);
 	SdlSfxNums[Chan] = SoundNum;
+	SDL_SetAudioStreamFormat(SdlSfxChannels[Chan], &(SDL_AudioSpec){ SDL_AUDIO_U8, 1, Snd->samplerate }, NULL);
 	SDL_PutAudioStreamData(SdlSfxChannels[Chan], Snd->data, Snd->size);
 }
-void EndSound(Word SoundNum) {
+
+void EndSound(Word SoundNum)
+{
+	if (!SdlAudioDevice)
+		return;
 	for (int i = 0; i < NAUDIOCHANS; i++) {
 		if (SdlSfxNums[i] == SoundNum) {
 			SDL_ClearAudioStream(SdlSfxChannels[i]);
@@ -1141,7 +1262,12 @@ void EndSound(Word SoundNum) {
 		}
 	}
 }
-void EndAllSound(void) {
+
+void EndAllSound(void)
+{
+
+	if (!SdlAudioDevice)
+		return;
 	for (int i = 0; i < NAUDIOCHANS; i++) {
 		SDL_ClearAudioStream(SdlSfxChannels[i]);
 		SdlSfxNums[i] = -1;

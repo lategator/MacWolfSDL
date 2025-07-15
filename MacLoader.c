@@ -1,9 +1,7 @@
 #include "SDLWolf.h"
 #include <string.h>
+#include <fluidsynth.h>
 #include <err.h>
-
-typedef uint32_t __attribute__((aligned(1), may_alias)) u_uint32_t;
-typedef uint16_t __attribute__((aligned(1), may_alias)) u_uint16_t;
 
 typedef struct {
 	void *data;
@@ -15,7 +13,10 @@ static const char *DefaultLevelsPath = "Levels/_Second_Encounter_(30_Levels).rsr
 
 static const uint32_t BrgrType = 0x42524752; /* BRGR */
 static const uint32_t PictType = 0x50494354; /* PICT */
+static const uint32_t SndType  = 0x736e6420; /* snd  */
 static const uint32_t CsndType = 0x63736E64; /* csnd */
+static const uint32_t MidiType = 0x4d696469; /* Midi */
+static const uint32_t InstType = 0x494E5354; /* INST */
 
 RFILE *MainResources = NULL;
 static Resource *ResourceCache = NULL;
@@ -24,7 +25,12 @@ static Resource *LevelResourceCache = NULL;
 static LongWord NumSounds = 0;
 static Sound *SoundCache = NULL;
 
-static RFILE *LoadResources(const char *FileName, Resource **CacheOut) {
+extern fluid_synth_t *FluidSynth;
+
+static void ReleaseSounds(void);
+
+static RFILE *LoadResources(const char *FileName, Resource **CacheOut)
+{
 	size_t Count;
 	RFILE *Rp;
 	Resource *Cache;
@@ -74,6 +80,7 @@ void InitResources(void)
 
 void KillResources(void)
 {
+	ReleaseSounds();
 	ReleaseResources(&MainResources, &ResourceCache);
 	ReleaseResources(&LevelResources, &LevelResourceCache);
 }
@@ -106,6 +113,25 @@ bool EnumerateLevels(SDL_EnumerateDirectoryCallback callback, void *userdata)
 	char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1];
 	stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
 	return SDL_EnumerateDirectory(TmpPath, callback, userdata);
+}
+
+static void *ReadResource(Word RezNum, LongWord Type, RFILE *Rp, LongWord *Len)
+{
+	ResAttr Attr;
+	void *Data;
+
+	if (res_attr(Rp, Type, RezNum, &Attr) == NULL)
+		return NULL;
+	Data = SDL_malloc(Attr.size);
+	if (!Data)
+		return NULL;
+	if (!res_read_ind(Rp, Type, Attr.index, Data, 0, Attr.size, NULL, NULL)) {
+		SDL_free(Data);
+		return NULL;
+	}
+	if (Len)
+		*Len = Attr.size;
+	return Data;
 }
 
 static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
@@ -244,7 +270,8 @@ void DLZSS(Byte * restrict Dest,const Byte * restrict Src,LongWord Length)
 
 **********************************/
 
-static void SoundDLZSS(const Byte* Src, size_t SrcSize, Byte *Dst, size_t DstSize) {
+static void SoundDLZSS(const Byte* Src, size_t SrcSize, Byte *Dst, size_t DstSize)
+{
 	const Byte * const SrcEnd = Src + SrcSize;
 	Byte * const DstStart = Dst;
 	Byte * const DstEnd = Dst + DstSize;
@@ -282,16 +309,16 @@ static void SoundDLZSS(const Byte* Src, size_t SrcSize, Byte *Dst, size_t DstSiz
 	}
 }
 
-Boolean DecodeCsnd(const Byte *Buf, LongWord Len, Sound *Snd)
+static Byte *DecodeCsnd(const Byte *Buf, LongWord Len, LongWord *Size)
 {
-	LongWord RealSize;
 	Byte *Data;
+	LongWord RealSize;
 
 	if (Len < 4)
 		return 0;
 	RealSize = SwapLongBE(*(const u_uint32_t*)Buf) & 0x00FFFFFF;
 	Data = SDL_malloc(RealSize);
-	if (!Data) return 0;
+	if (!Data) return NULL;
 	SoundDLZSS(Buf + 4, Len - 4, Data, RealSize);
 	uint8_t* Delta = Data;
 	uint8_t* const DataEnd = Data + RealSize;
@@ -300,25 +327,54 @@ Boolean DecodeCsnd(const Byte *Buf, LongWord Len, Sound *Snd)
 	}
 	if (RealSize < 42) {
 		SDL_free(Data);
-		return 0;
+		return NULL;
 	}
-	/*
-	Snd->base_note = Data[41] ? Data[41] : 0x3C;
-	Snd->loop_start = SwapLongBE(*(u_uint32_t*)&Data[32]) >> 16;
-	Snd->loop_end = SwapLongBE(*(u_uint32_t*)&Data[36]) >> 16;
-	*/
-	Snd->samplerate = SwapLongBE(*(u_uint32_t*)&Data[28]) >> 16;
-	Snd->size = RealSize - 42;
-	Snd->data = &Data[42];
-	return 1;
+	*Size = RealSize;
+	return Data;
 }
 
-void RegisterSounds(short *SoundIDs)
+static Boolean LoadSound(Sound *Snd, Word ID)
 {
 	ResAttr Attr;
-	size_t Count = 0;
+	uint8_t *Buf, *Decode;
+	LongWord Type;
+	LongWord Size;
+
+	Type = CsndType;
+	if (!res_attr(MainResources, Type, ID, &Attr)) {
+		Type = SndType;
+		if (!res_attr(MainResources, Type, ID, &Attr))
+			return 0;
+	}
+	Buf = SDL_malloc(Attr.size);
+	if (!Buf) err(1, "malloc");
+	if (!res_read_ind(MainResources, Type, Attr.index, Buf, 0, Attr.size, NULL, NULL))
+		goto Fail;
+	if (Type == CsndType) {
+		Decode = DecodeCsnd(Buf, Attr.size, &Size);
+		if (!Decode)
+			goto Fail;
+		SDL_free(Buf);
+		Buf = Decode;
+	} else {
+		Size = Attr.size;
+	}
+	Snd->ID = ID;
+	Snd->basenote = Buf[41] ? Buf[41] : 0x3C;
+	Snd->loopstart = SwapLongBE(*(u_uint32_t*)&Buf[32]);
+	Snd->loopend = SwapLongBE(*(u_uint32_t*)&Buf[36]);
+	Snd->samplerate = SwapLongBE(*(u_uint32_t*)&Buf[28]) >> 16;
+	Snd->size = Size - 42;
+	Snd->data = &Buf[42];
+	return 1;
+Fail:
+	SDL_free(Buf);
+	return 0;
+}
+
+static void ReleaseSounds(void)
+{
 	size_t i;
-	uint8_t *Buf;
 
 	if (SoundCache) {
 		for (i = 0; i < NumSounds; i++)
@@ -328,26 +384,27 @@ void RegisterSounds(short *SoundIDs)
 		SoundCache = NULL;
 		NumSounds = 0;
 	}
+}
+
+void RegisterSounds(short *SoundIDs)
+{
+	size_t Count = 0;
+	size_t i;
+
+	ReleaseSounds();
 	for (short *SoundID = SoundIDs; *SoundID != -1; SoundID++, Count++);
 	SoundCache = SDL_calloc(Count, sizeof(Sound));
 	NumSounds = Count;
 	if (!SoundCache) err(1, "malloc");
 	i = 0;
 	for (short *SoundID = SoundIDs; *SoundID != -1; SoundID++, i++) {
-		if (!res_attr(MainResources, CsndType, *SoundID, &Attr))
-			continue;
-		Buf = SDL_malloc(Attr.size);
-		if (!Buf) err(1, "malloc");
-		if (!res_read_ind(MainResources, CsndType, Attr.index, Buf, 0, Attr.size, NULL, NULL))
-			goto Done;
-		if (DecodeCsnd(Buf, Attr.size, &SoundCache[i]))
-			SoundCache[i].ID = *SoundID;
-	Done:
-		SDL_free(Buf);
-   }
+		SoundCache[i].ID = *SoundID;
+		LoadSound(&SoundCache[i], *SoundID);
+	}
 }
 
-static int SearchSounds(const void *a, const void *b) {
+static int SearchSounds(const void *a, const void *b)
+{
 	int ua, ub;
 
 	ua = (size_t)a;
@@ -355,9 +412,209 @@ static int SearchSounds(const void *a, const void *b) {
 	return ua - ub;
 }
 
-Sound *LoadSound(Word RezNum)
+Sound *LoadCachedSound(Word RezNum)
 {
-	return bsearch((void*)(size_t)RezNum, SoundCache, NumSounds, sizeof(Sound), SearchSounds);
+	Sound *Snd;
+	Snd = bsearch((void*)(size_t)RezNum, SoundCache, NumSounds, sizeof(Sound), SearchSounds);
+	if (!Snd || !Snd->data)
+		return NULL;
+	return Snd;
+}
+
+Byte *LoadSong(Word RezNum, LongWord *Len)
+{
+	Byte *Res;
+	if (LevelResources) {
+		Res = ReadResource(RezNum, MidiType, LevelResources, Len);
+		if (Res)
+			return Res;
+	}
+	return ReadResource(RezNum, MidiType, MainResources, Len);
+}
+
+typedef struct {
+	Word ID;
+	Word flags;
+	Byte basenote;
+	fluid_preset_t *preset;
+	fluid_sample_t *sample;
+} Instrument;
+
+typedef struct {
+	Word iter;
+	Word ninstruments;
+	Word nsounds;
+	Instrument instruments[];
+} SFHeader;
+
+static const char *SoundFontGetName()
+{
+	return "";
+}
+
+static fluid_preset_t *SoundFontGetPreset(fluid_sfont_t *SFont, int Bank, int Prog)
+{
+	int i;
+	SFHeader *Header = fluid_sfont_get_data(SFont);
+	for (i = 0; i < Header->ninstruments; i++)
+		if (Header->instruments[i].ID == Prog)
+			return Header->instruments[i].preset;
+	return NULL;
+}
+
+static void SoundFontIterStart(fluid_sfont_t *SFont)
+{
+	SFHeader *Header = fluid_sfont_get_data(SFont);
+	Header->iter =0;
+}
+
+static fluid_preset_t *SoundFontIterNext(fluid_sfont_t *SFont)
+{
+	SFHeader *Header = fluid_sfont_get_data(SFont);
+	if (Header->iter >= Header->ninstruments)
+		return NULL;
+	return Header->instruments[Header->iter++].preset;
+}
+
+static int PresetGetBank(fluid_preset_t *Preset)
+{
+	return 0;
+}
+
+static int PresetGetProg(fluid_preset_t *Preset)
+{
+	Instrument *Inst = fluid_preset_get_data(Preset);
+	return Inst->ID;
+}
+
+static int PresetNoteOn(fluid_preset_t *Preset, fluid_synth_t *Synth, int Chan, int Key, int Vel)
+{
+	fluid_voice_t *Voice;
+	Instrument *Inst = fluid_preset_get_data(Preset);
+	if (Inst->flags & 0x04)
+		fluid_synth_all_sounds_off(Synth, Chan);
+	if (Inst->flags & 0x40)
+		Key = Inst->basenote;
+	Voice = fluid_synth_alloc_voice(Synth, Inst->sample, Chan, Key, Vel);
+	if (!Voice)
+		return FLUID_FAILED;
+	if (!(Inst->flags & 0x2000))
+		fluid_voice_gen_set(Voice, GEN_SAMPLEMODE, 1);
+	fluid_voice_gen_set(Voice, GEN_VOLENVRELEASE, 4000.f);
+	fluid_voice_gen_set(Voice, GEN_VOLENVDECAY, 8000.f);
+	fluid_voice_gen_set(Voice, GEN_VOLENVHOLD, 5000.f);
+	fluid_synth_start_voice(Synth, Voice);
+	return FLUID_OK;
+}
+static void PresetFree(fluid_preset_t *Preset)
+{
+}
+
+static int SoundFontFree(fluid_sfont_t *SFont)
+{
+	SFHeader *Header;
+	int i;
+	Sound *Sounds;
+
+	Header = fluid_sfont_get_data(SFont);
+	for (i = 0; i < Header->ninstruments; i++) {
+		if (Header->instruments[i].preset)
+			delete_fluid_preset(Header->instruments[i].preset);
+	}
+	Sounds = (void*)&Header->instruments[Header->ninstruments];
+	for (i = 0; i < Header->nsounds; i++) {
+		if (Sounds[i].data)
+			SDL_free(Sounds[i].data);
+	}
+	delete_fluid_sfont(SFont);
+	return 0;
+}
+
+void MacLoadSoundFont(void)
+{
+	size_t i, j;
+	Byte Buf[22];
+	ResAttr Attr;
+	SFHeader *Header;
+	Instrument *Instruments;
+	Sound *Sounds;
+	fluid_sfont_t *SoundFont;
+	fluid_preset_t *Preset;
+	fluid_sample_t *Sample;
+	Word SoundID;
+	Uint8 *Data;
+	int DstLen;
+	bool Ret;
+
+	if (!FluidSynth)
+		return;
+	i = res_count(MainResources, InstType);
+	if (!i)
+		return;
+	SoundFont = new_fluid_sfont(SoundFontGetName, SoundFontGetPreset, SoundFontIterStart, SoundFontIterNext, SoundFontFree);
+	if (!SoundFont)
+		return;
+
+	Header = SDL_malloc(sizeof(SFHeader)+i*(sizeof(Instrument)+sizeof(Sound)));
+	if (!Header) err(1, "malloc");
+	Header->ninstruments = i;
+	Header->nsounds = 0;
+	Header->iter = 0;
+	Instruments = Header->instruments;
+	Sounds = (void*)&Instruments[i];
+	for (i = 0; i < Header->ninstruments; i++) {
+		Instruments[i].preset = NULL;
+		Instruments[i].ID = -1;
+		if (!res_list(MainResources, InstType, &Attr, i, 1, NULL, NULL))
+			continue;
+		Instruments[i].ID = Attr.ID;
+		if (Attr.size < sizeof Buf)
+			continue;
+		if (!res_read_ind(MainResources, InstType, i, Buf, 0, sizeof Buf, NULL, NULL))
+			continue;
+		Instruments[i].flags = (Buf[5]<<8)|Buf[6];
+		Instruments[i].basenote = Buf[3];
+		Preset = new_fluid_preset(SoundFont, SoundFontGetName, PresetGetBank, PresetGetProg, PresetNoteOn, PresetFree);
+		if (!Preset)
+			continue;
+		Sample = new_fluid_sample();
+		if (!Sample) {
+			delete_fluid_preset(Preset);
+			continue;
+		}
+		Instruments[i].preset = Preset;
+		Instruments[i].sample = Sample;
+		SoundID = SwapUShortBE(*(u_uint16_t*)&Buf[0]);
+		for (j = 0; j < Header->nsounds; j++) {
+			if (Sounds[j].ID == SoundID)
+				break;
+		}
+		if (j == Header->nsounds) {
+			if (!LoadSound(&Sounds[j], SoundID))
+				continue;
+			Ret = SDL_ConvertAudioSamples(
+			  &(SDL_AudioSpec){SDL_AUDIO_U8, 1, Sounds[j].samplerate}, Sounds[j].data, Sounds[j].size,
+			  &(SDL_AudioSpec){SDL_AUDIO_S16, 1, Sounds[j].samplerate}, &Data, &DstLen);
+			SDL_free(Sounds[j].data - 42);
+			if (!Ret)
+				continue;
+			Sounds[j].data = Data;
+			Header->nsounds++;
+		}
+		fluid_sample_set_sound_data(Sample, Sounds[j].data, NULL, Sounds[j].size,
+							  (Instruments[i].flags & 0x800) ? Sounds[j].samplerate : 22254, 0);
+		fluid_sample_set_pitch(Sample, Instruments[i].basenote ? Instruments[i].basenote : Sounds[j].basenote, 0);
+		if (!(Instruments[i].flags & 0x2000))
+			fluid_sample_set_loop(Sample, Sounds[j].loopstart, Sounds[j].loopend);
+	}
+	if (Header->nsounds != Header->ninstruments) {
+		Header = SDL_realloc(Header, sizeof(SFHeader)+Header->ninstruments*sizeof(Instrument)+Header->nsounds*sizeof(Sound));
+		if (!Header) err(1, "realloc");
+	}
+	for (i = 0; i < Header->ninstruments; i++)
+		fluid_preset_set_data(Header->instruments[i].preset, &Header->instruments[i]);
+	fluid_sfont_set_data(SoundFont, Header);
+	fluid_synth_add_sfont(FluidSynth, SoundFont);
 }
 
 /**********************************

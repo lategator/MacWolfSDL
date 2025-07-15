@@ -121,8 +121,13 @@ void KillAResource(Word RezNum);
 typedef struct {
 	Word ID;
 	Word samplerate;
+	uint8_t basenote;
+	int loopstart;
+	int loopend;
 	LongWord size;
 	void *data;
 } Sound;
 
-Sound *LoadSound(Word RezNum);
+Sound *LoadCachedSound(Word RezNum);
+Byte *LoadSong(Word RezNum, LongWord *Len);
+Boolean LoadInstrument(LongWord Index, Byte *Buf);

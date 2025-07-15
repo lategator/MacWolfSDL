@@ -247,13 +247,13 @@ void PlaySong(Word Song)
 		KilledSong = Song;
 		if (SystemState&MusicActive) {
 			if (Song!=LastSong) {
-				//BeginSongLooped(Song);
+				BeginSongLooped(Song);
 				LastSong = Song;
 			}
 			return;
 		}
 	}
-	//EndSong();
+	EndSong();
 	LastSong = -1;
 }
 

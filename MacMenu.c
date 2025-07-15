@@ -1,4 +1,3 @@
-#include "Burger.h"
 #include "WolfDef.h"
 #include "SDLWolf.h"
 #include <string.h>
@@ -543,7 +542,7 @@ static void DrawGameDiff(void)
 
 Word ChooseGameDiff(void)
 {
-	Boolean Click;
+	Boolean Click = 0;
 	int oldmousex, oldmousey;
 	int i;
 	Word RetVal = FALSE;
@@ -715,20 +714,16 @@ int DoMenuCommand(int Menu, int Item)
 		case 0:
 			SystemState^=SfxActive;				/* Sound on/off flags */
 			if (!(SystemState&SfxActive)) {
-				//ResumeSoundMusicSystem();
 				PlaySound(0);			/* Turn off all existing sounds */
-				//PauseSoundMusicSystem();
 			}
 			break;
 		case 1:
 			SystemState^=MusicActive;			/* Music on/off flags */
-			//ResumeSoundMusicSystem();
 			if (SystemState&MusicActive) {
 				PlaySong(KilledSong);		/* Restart the music */
 			} else {
 				PlaySong(0);	/* Shut down the music */
 			}
-			//PauseSoundMusicSystem();
 			break;
 		case 2:
 			return -3;
@@ -925,13 +920,6 @@ static int RunKeyboardDialog(int Click)
 	return 0;
 }
 
-// TODO key dialog crashes on 320x200
-// TODO initial click after starting game should not fire
-// TODO midi support?
-// TODO fullscreen and video settings
-// TODO missing ammo drops bug on some levels (1-10?)
-// TODO dropped sfx (door close, maybe more?)
-// TODO crash loading ep6
 static void DrawKeyboardDialog(void)
 {
 	int X, Y;
@@ -995,7 +983,8 @@ exit_t PauseMenu(Boolean Shape)
 	Word OpenDialog = 0;
 	exit_t RetVal = EX_LIMBO;
 
-	// if(playstate == EX_STILLPLAYING || playstate == EX_AUTOMAP) PauseSoundMusicSystem();	/* Pause the music */
+	if(playstate == EX_STILLPLAYING || playstate == EX_AUTOMAP)
+		PauseSoundMusicSystem();
 	UngrabMouse();
 	if (Shape) {
 		PackPtr = LoadAResource(rPauseShape);
@@ -1175,5 +1164,6 @@ exit_t PauseMenu(Boolean Shape)
 	joystick1=0;
 	if (playstate == EX_STILLPLAYING)
 		GrabMouse();
+	ResumeSoundMusicSystem();
 	return RetVal;
 }

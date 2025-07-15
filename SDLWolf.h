@@ -3,6 +3,9 @@
 #include "res.h"
 #include <SDL3/SDL.h>
 
+typedef uint32_t __attribute__((aligned(1), may_alias)) u_uint32_t;
+typedef uint16_t __attribute__((aligned(1), may_alias)) u_uint16_t;
+
 extern SDL_Renderer *SdlRenderer;
 extern RFILE *MainResources;
 extern SDL_Keycode KeyBinds[12];
