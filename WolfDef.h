@@ -434,6 +434,13 @@ typedef struct {
 	Word clipscale;			/* Size of sprite (Scale number) */
 } vissprite_t;
 
+
+typedef struct {
+	unsigned short Topy;
+	unsigned short Boty;
+	unsigned short Shape;
+} SpriteRun;
+
 /**********************************
 
 	Data struct for thinking actor

@@ -734,11 +734,14 @@ Abort:
 
 Word LoadSpriteArt(void)
 {
-	Word i;
+	Word i,j;
 	Word Length;
-	Byte *MyPtr;
-	Byte *MyNewPtr;
+	Byte *PackPtr;
+	Word *CharPtr;
+	const SpriteRun *RunPtr;
 	Word Num;
+	Word Width;
+	Word Offset;
 	LongWord Size;
 
 	i=1;
@@ -746,24 +749,38 @@ Word LoadSpriteArt(void)
 		SpriteArray[i] = NULL;
 		if (WallHits[i]) {
 			Num = i+(428-1);
-			MyPtr = LoadAResource(Num);	/* Get the packed file */
-			if (!MyPtr) {
-				continue;
-			}
+			CharPtr = NULL;
+			PackPtr = LoadAResource(Num);	/* Get the packed file */
+			if (!PackPtr)
+				goto Next;
 			Size = ResourceLength(Num);
-			if (Size < 2) {
-				ReleaseAResource(Num);
-				continue;
+			if (Size < 2)
+				goto Next;
+			Length = PackPtr[0];				/* Get the length unpacked */
+			Length |= PackPtr[1]<<8;
+			if (Length < 2)
+				goto Next;
+			CharPtr = AllocSomeMem(Length);		/* Get memory for the sprite */
+			DLZSS((Byte*)CharPtr,Length,&PackPtr[2], Size - 2);	/* Unpack it */
+			Width = SwapUShortBE(CharPtr[0]);
+			if (Length < Width*2+2)
+				goto Next;
+			for (j = 0; j < Width; j++) {		/* Bounds check all sprite columns */
+				Offset = SwapUShortBE(CharPtr[j+1]);
+				if (Length < Offset + sizeof(SpriteRun))
+					goto Next;
+				RunPtr = (const void*) &CharPtr[Offset/2];
+				while (SwapUShortBE(RunPtr->Topy) != (unsigned short) -1) {		/* Not end of record? */
+					if (Length < SwapUShortBE(RunPtr->Shape)+SwapUShortBE(RunPtr->Boty)/2-SwapUShortBE(RunPtr->Topy)/2)
+						goto Next;
+					RunPtr++;
+				}
 			}
-			Length = MyPtr[0];				/* Get the length unpacked */
-			Length |= MyPtr[1]<<8;
-			MyNewPtr = (Byte *)AllocSomeMem(Length);		/* Get memory for the sprite */
-			if (!MyNewPtr) {
-				ReleaseAResource(Num);
-				continue;
-			}
-			DLZSS(MyNewPtr,Length,&MyPtr[2], Size - 2);	/* Unpack it */
-			SpriteArray[i] = MyNewPtr;		/* Save the pointer */
+			SpriteArray[i] = CharPtr;		/* Save the pointer */
+			CharPtr = NULL;
+		Next:
+			if (CharPtr)
+				FreeSomeMem(CharPtr);
 			ReleaseAResource(Num);		/* Release the resource */
 			DrawPsyched(i+66);
 		}

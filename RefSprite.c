@@ -122,6 +122,8 @@ void AddSprite (thing_t *thing,Word actornum)
 /* calculate edges of the shape */
 
 	patch = SpriteArray[thing->sprite];	/* Pointer to the sprite info */
+	if (!patch)
+		return;
 
 	width =((LongWord)SwapUShortBE(patch[0])*scale)>>6; 	/* Get the width of the shape */
 	if (!width) {
@@ -167,6 +169,8 @@ void DrawTopSprite(void)
 /* calculate edges of the shape */
 
 		patch = SpriteArray[topspritenum];		/* Get the info on the shape */
+		if (!patch)
+			return;
 
 		width = (SwapUShortBE(patch[0])*topspritescale)>>7;		/* Adjust the width */
 		if (!width) {

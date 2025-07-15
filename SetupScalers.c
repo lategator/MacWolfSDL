@@ -80,12 +80,6 @@ void IO_ScaleWallColumn(Word X,Word Scale,Word Tile,Word Column)
 
 **********************************/
 
-typedef struct {
-	unsigned short Topy;
-	unsigned short Boty;
-	unsigned short Shape;
-} SpriteRun;
-
 void SpriteGlue(Byte *ArtStart,LongWord Frac,LongWord Integer,Byte *ScreenPtr,Word Count,LongWord Delta, Word Width)
 {
 	for (; Count > 0; Count--) {

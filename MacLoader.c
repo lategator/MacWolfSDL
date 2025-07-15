@@ -98,11 +98,23 @@ void KillResources(void)
 
 Boolean MountMapFile(const char *FileName)
 {
+	if (MapListPtr) {
+		MapListPtr = NULL;
+		ReleaseAResource(rMapList);
+	}
+	if (SoundListPtr) {
+		SoundListPtr = NULL;
+		ReleaseAResource(MySoundList);
+	}
+	if (WallListPtr) {
+		WallListPtr = NULL;
+		ReleaseAResource(MyWallList);
+	}
+	if (SongListPtr) {
+		SongListPtr = NULL;
+		ReleaseAResource(rSongList);
+	}
 	ReleaseResources(&LevelResources, &LevelResourceCache);
-	MapListPtr = NULL;
-	SoundListPtr = NULL;
-	SongListPtr = NULL;
-	WallListPtr = NULL;
 
 	if (!FileName)
 		FileName = DefaultLevelsPath;
