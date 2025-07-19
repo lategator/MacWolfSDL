@@ -1,4 +1,4 @@
-project('wolfsnes', 'c', default_options: ['default_library=static'])
+project('macwolfsdl', 'c', default_options: ['default_library=static'])
 cc = meson.get_compiler('c')
 srcs = [
   'Burger.c', 'Data.c', 'Doors.c', 'EnMove.c', 'EnThink.c', 'InterMis.c',
