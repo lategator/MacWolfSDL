@@ -1,6 +1,6 @@
 #include "WolfDef.h"
 #include <string.h>
-#include <math.h>
+#include <SDL3/SDL_stdinc.h>
 
 #define	DOORPIC	59
 
@@ -228,7 +228,7 @@ Boolean StartupRendering(Word NewSize)
 		i = 0;
 		do {
 			a = (i-(FINEANGLES>>2)+0.1)*PI*2/FINEANGLES;
-			fv = 256*tanf(a);
+			fv = 256*SDL_tanf(a);
 			if (fv>0x7fff) {
 				t = 0x7fff;
 			} else if (fv<-0x7fff) {
@@ -244,7 +244,7 @@ Boolean StartupRendering(Word NewSize)
 		i = 0;
 		do {
 			a = (i+0.0)*PI*2/FINEANGLES;
-			t = 256*sinf(a);
+			t = 256*SDL_sinf(a);
 			if (t>255) {
 				t = 255;
 			}

@@ -206,7 +206,7 @@ void TitleScreen (void)
 	BlastScreen();
 	for (;;) {
 		Key = WaitTicksEvent(0);		/* Wait for event */
-		if (Key != '\e' && Key != -3)
+		if (Key != '\x1b' && Key != -3)
 			break;
 		PSTmp = PauseMenu(FALSE);
 		if (PSTmp > 0) {
@@ -230,7 +230,7 @@ void TitleScreen (void)
 
 extern Word NumberIndex;
 
-int main()
+int main(int argc, char *argv[])
 {
 	InitTools();		/* Init the system environment */
 	WaitTick();			/* Wait for a system tick to go by */

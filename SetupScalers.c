@@ -1,6 +1,10 @@
 #include "WolfDef.h"
 #include <string.h>
 
+#ifdef _MSC_VER
+#define __builtin_add_overflow(a, b, c) _addcarry_u32(0, (a), (b), (c))
+#endif
+
 LongWord ScaleDiv[2048];			/* Divide table for scalers */
 
 /**********************************
@@ -220,7 +224,7 @@ void MakeSmallFont(void)
 			memcpy(DestPtr,TempPtr,16*16*5);
 		} else {
 			for (i = 0; i < 5; i++)
-				DestPtr = memcpy(DestPtr,TempPtr,16*16) + 16*16;
+				DestPtr = (Byte*)memcpy(DestPtr,TempPtr,16*16) + 16*16;
 		}
 		ReleaseAResource(MyBJFace);
 	}

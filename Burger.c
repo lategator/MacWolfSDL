@@ -48,11 +48,17 @@ typedef struct {
 	uint8_t xa: 4, yo: 4;
 } glyph_t;
 
-/**********************************
+#ifdef _MSC_VER
+char *stpcpy(char *restrict dst, const char *restrict src)
+{
+	size_t n;
 
-	Wait a single system tick
-
-**********************************/
+	n = strlen(src);
+	memcpy(dst, src, n);
+	dst[n] = '\0';
+	return &dst[n];
+}
+#endif
 
 
 /**********************************
@@ -150,50 +156,6 @@ int WaitTicksEvent(Word Time)
 		WaitTick();
 	}
 	return 0;
-}
-
-/**********************************
-
-	Convert a long value into a ascii string
-
-**********************************/
-
-static LongWord Tens[] = {
-	1,
-	10,
-	100,
-	1000,
-	10000,
-	100000,
-	1000000,
-	10000000,
-	100000000,
-	1000000000};
-
-void ultoa(LongWord Val,char *Text)
-{
-	Word Index;		/* Index to Tens table */
-	Word Hit;		/* Printing? */
-	Word Letter;	/* Letter to print */
-	LongWord LongVal;	/* Tens value */
-
-	Index = 9;		/* Start at the millions */
-	Hit = 0;		/* Didn't print anything yet! */
-	do {
-		Letter = '0';	/* Init the char */
-		LongVal = Tens[Index];	/* Init the value into a local */
-		while (Val >= LongVal) {	/* Is the number in question larger? */
-			Val -= LongVal;		/* Sub the tens value */
-			++Letter;			/* Inc the char */
-			Hit=1;				/* I must draw! */
-		}
-		if (Hit) {	/* Remove the leading zeros */
-			Text[0] = Letter;	/* Save char in the string */
-			++Text;			/* Inc dest */
-		}
-	} while (--Index);		/* All the tens done? */
-	Text[0] = Val + '0';	/* Must print FINAL digit */
-	Text[1] = 0;			/* End the string */
 }
 
 /**********************************

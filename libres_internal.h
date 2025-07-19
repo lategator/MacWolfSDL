@@ -46,6 +46,10 @@ struct RmResRef {
 
 // in-file structures
 
+#ifdef _MSC_VER
+#pragma pack(push, r1, 1)
+#endif
+
 struct __attribute__ ((__packed__)) RfHdr {
     // resource fork header
     uint32_t    dataOffset;
@@ -112,6 +116,10 @@ struct __attribute__ ((__packed__)) RfCmpHdr {
         } v1;
     } u;
 };
+
+#ifdef _MSC_VER
+#pragma pack(pop, r1)
+#endif
 
 // private functions
 void* res_bread (RFILE *rp, void *buf, size_t offset, size_t count, size_t *read);

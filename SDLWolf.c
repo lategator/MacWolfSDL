@@ -226,6 +226,19 @@ void BlitSurface(SDL_Surface *Surface, const SDL_Rect *Rect)
 	SDL_UnlockTexture(ScreenTexture);
 }
 
+void BlitScenarioSelect(SDL_Surface *BG, SDL_Surface *Pic, const SDL_Rect* Rect)
+{
+	SDL_Surface* Screen;
+
+	SDL_LockTextureToSurface(ScreenTexture, NULL, &Screen);
+	SDL_ClearSurface(Screen, 0, 1, 1, 1);
+	if (BG)
+		SDL_BlitSurface(BG, NULL, Screen, NULL);
+	if (Pic)
+		SDL_BlitSurface(Pic, NULL, Screen, Rect);
+	SDL_UnlockTexture(ScreenTexture);
+}
+
 void BlitScreen(void)
 {
 	BlitSurface(ScreenSurface, NULL);
@@ -268,6 +281,7 @@ void StartUIOverlay(void)
 	CurrentSurface = UISurface;
 	ClearTheScreen(WHITE);
 	ClearScreenTexture();
+	SDL_SetTextureBlendMode(ScreenTexture, SDL_BLENDMODE_BLEND);
 }
 
 void EndUIOverlay(void)
@@ -276,6 +290,7 @@ void EndUIOverlay(void)
 	CurrentSurface = ScreenSurface;
 	BlitSurface(UISurface, NULL);
 	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
+	SDL_SetTextureBlendMode(ScreenTexture, SDL_BLENDMODE_NONE);
 	RenderScreen();
 }
 
@@ -709,6 +724,9 @@ void ResizeGameWindow(Word Width, Word Height)
 	if (!FramebufferTexture)
 		BailOut("SDL_CreateTexture: %s", SDL_GetError());
 
+	SDL_SetTextureBlendMode(ScreenTexture, SDL_BLENDMODE_NONE);
+	SDL_SetTextureBlendMode(FramebufferTexture, SDL_BLENDMODE_NONE);
+
 	if (SDL_MUSTLOCK(ScreenSurface))
 		SDL_LockSurface(ScreenSurface);
 	if (SDL_MUSTLOCK(UISurface))
@@ -771,8 +789,15 @@ TryAgain:
 		if (UnpackLength < Offset + 4)
 			goto OhShit;
 		Word *ShapePtr = (void*)(GameShapeBuffer+Offset);
-		if (UnpackLength < Offset + 4 + SwapUShortBE(ShapePtr[0]) * SwapUShortBE(ShapePtr[1]))
-			goto OhShit;
+		if (i >= 12 && i < 12+24) {
+			if (UnpackLength < Offset + 8)
+				goto OhShit;
+			if (UnpackLength < Offset + 4 + SwapUShortBE(ShapePtr[2]) * SwapUShortBE(ShapePtr[3]))
+				goto OhShit;
+		} else {
+			if (UnpackLength < Offset + 4 + SwapUShortBE(ShapePtr[0]) * SwapUShortBE(ShapePtr[1]))
+				goto OhShit;
+		}
 		GameShapes[i] = ShapePtr;
 	} while (++i<j);
 	if (Pass2) {		/* Low memory? */

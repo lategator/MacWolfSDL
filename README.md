@@ -4,11 +4,10 @@ A source port of Macintosh Wolfenstein 3D to modern platforms using SDL3. Preser
 
 ## Building
 
-Required dependencies: `SDL3 meson ninja`
+CMake and SDL3 are required to build. SDL3 will be downloaded automatically if it is not present on the system.
 
 ```bash
-meson setup build
-ninja -C build
+cmake -B build . && cmake --build build
 ```
 
 ## Running

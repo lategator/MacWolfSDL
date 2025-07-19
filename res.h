@@ -23,12 +23,20 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef _MSC_VER
+#define __attribute__(...)
+#endif
+
 #define TYPECHARS(t) ((t) >> 24) & 0xFF, ((t) >> 16) & 0xFF, ((t) >> 8) & 0xFF, (t) & 0xFF
 
 extern const char * libres_id;
 
 // in-memory structures
 typedef struct RFILE RFILE;
+
+#ifdef _MSC_VER
+#pragma pack(push, r1, 1)
+#endif
 
 typedef union __attribute__ ((__packed__)) {
     struct {
@@ -43,6 +51,9 @@ typedef union __attribute__ ((__packed__)) {
     } fl;
     uint8_t b;
 } RFlags;
+#ifdef _MSC_VER
+#pragma pack(pop, r1)
+#endif
 
 /* this structure is only valid while the file is open */
 struct ResAttr {

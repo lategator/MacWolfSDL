@@ -21,11 +21,18 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <search.h>
-#include <arpa/inet.h>
 #include "res.h"
 #include "libres_internal.h"
+
+#ifndef _MSC_VER
+#include <arpa/inet.h>
+#include <strings.h>
+#else
+#define bzero(dst, size) memset((dst), 0, (size))
+#define ntohs _byteswap_ushort
+#define ntohl _byteswap_ulong
+#endif
 
 const char * libres_id = "libres 1.0.1 (C)2008-2016 namedfork.net";
 
@@ -36,7 +43,7 @@ RFILE* res_open (const char *path, int mode) {
     bzero(rp, sizeof(RFILE));
 
     // open
-    rp->fp = fopen(path, "r");
+    rp->fp = fopen(path, "rb");
     if (rp->fp == NULL) {
         free(rp);
         return NULL;
@@ -237,7 +244,7 @@ void* res_bread (RFILE *rp, void *buf, size_t offset, size_t count, size_t *read
     size_t r;
     if (rp->buf) {
         // memory
-        memcpy(buf, rp->buf+offset, count);
+        memcpy(buf, (uint8_t*)rp->buf+offset, count);
         r = count;
     } else if (rp->fp) {
         // file pointer
@@ -291,9 +298,9 @@ RFILE* res_load (RFILE *rp) {
     if (map == NULL || count != mapLength) egoto(EINVAL, error);
     rp->attributes = ntohs(map->attributes);
     size_t typeListOffset = ntohs(map->typeListOffset);
-    struct RfTypeList *types = ((void*)map)+typeListOffset;
+    struct RfTypeList *types = (void*)(((uint8_t*)map)+typeListOffset);
     size_t nameListOffset = ntohs(map->nameListOffset);
-    uint8_t *names = ((void*)map)+nameListOffset;
+    uint8_t *names = (void*)(((uint8_t*)map)+nameListOffset);
 
     // read types
     rp->numTypes = 1+(int16_t)ntohs(types->count);
@@ -314,7 +321,7 @@ RFILE* res_load (RFILE *rp) {
         int refsNeedSort = 0;
         size_t refOffset = ntohs(types->entry[i].offset);
         if (mapLength < refOffset + sizeof(struct RfRefEntry)) egoto(EINVAL, error);
-        struct RfRefEntry *ent = ((void*)types)+refOffset;
+        struct RfRefEntry* ent = (void*)(((uint8_t*)types) + refOffset);
         for(int j=0; j < t->count; j++) {
             t->list[j].ID = ntohs(ent[j].ID);
             if (j && (t->list[j].ID < t->list[j-1].ID)) refsNeedSort = 1;

@@ -387,14 +387,20 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 	return SDL_ENUM_CONTINUE;
 }
 
-static const Rect ScenarioListRect = {82, 14, 258, 339};
-static const LongWord ScenariosItemHeight = (ScenarioListRect.bottom - ScenarioListRect.top)/16;
+#define SCENARIOLISTX 14
+#define SCENARIOLISTY 82
+#define SCENARIOLISTW 325
+#define SCENARIOLISTH 176
+static const Rect ScenarioListRect = {SCENARIOLISTY, SCENARIOLISTX, SCENARIOLISTY+SCENARIOLISTH, SCENARIOLISTX+SCENARIOLISTW};
+static const LongWord ScenariosItemHeight = SCENARIOLISTH/16;
 static widget_t ScenarioWidgets[2] = {
 	{&VScrollBarClass,
-	{ScenarioListRect.top, ScenarioListRect.right-1, ScenarioListRect.bottom, ScenarioListRect.right + 15},
+   {SCENARIOLISTY, SCENARIOLISTX+SCENARIOLISTW-1, SCENARIOLISTY+SCENARIOLISTH, SCENARIOLISTX+SCENARIOLISTW+15},
 	&(scrollbar_t){&MenuScrollY, &ScenarioCount}},
 	{&ButtonClass, {288, 155, 308, 213}, "Cancel"}
 };
+
+extern void BlitScenarioSelect(SDL_Surface* BG, SDL_Surface* Pic, const SDL_Rect* Rect);
 
 static void DrawScenarioList(void)
 {
@@ -404,12 +410,9 @@ static void DrawScenarioList(void)
 	SDL_FRect FR;
 	SDL_Surface *ScenarioPic = NULL;
 
-	if (MenuBG)
-		BlitSurface(MenuBG, NULL);
 	if (ScenarioCount)
 		ScenarioPic = Scenarios[MenuPosY].pic;
-	if (ScenarioPic)
-		BlitSurface(ScenarioPic, &(SDL_Rect){231, 17, 96, 64});
+	BlitScenarioSelect(MenuBG, ScenarioPic, &(SDL_Rect){231, 17, 96, 64});
 	StartUIOverlay();
 	if (!ScenarioPic) {
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
@@ -711,12 +714,12 @@ TryIt:
 	return RetVal;
 }
 
-static Boolean GetFullScreen() { return FullScreen; }
-static Boolean GetSoundEnabled() { return (SystemState & SfxActive) != 0; }
-static Boolean GetMusicEnabled() { return (SystemState & MusicActive) != 0; }
-static Boolean GetMouseEnabled() { return MouseEnabled; }
-static Boolean GetSlowDown() { return SlowDown; }
-static Boolean GetPaused() { return TRUE; }
+static Boolean GetFullScreen(widget_t*_W,void*_D) { return FullScreen; }
+static Boolean GetSoundEnabled(widget_t*_W,void*_D) { return (SystemState & SfxActive) != 0; }
+static Boolean GetMusicEnabled(widget_t*_W,void*_D) { return (SystemState & MusicActive) != 0; }
+static Boolean GetMouseEnabled(widget_t*_W,void*_D) { return MouseEnabled; }
+static Boolean GetSlowDown(widget_t*_W,void*_D) { return SlowDown; }
+static Boolean GetPaused(widget_t*_W,void*_D) { return TRUE; }
 
 static menu_t FileMenu = {"File", (widget_t[7]){
 	{&MenuItemClass, {20, 13, 36, 144}, &(menuitem_t){"New Game..."}},
@@ -831,15 +834,15 @@ static const Rect ScreenFilterRect = {0, 0, 14, 88};
 static const Rect ScreenDoneRect = {0, 0, 20, 50};
 
 static widget_t ScreenButtons[9] = {
-	{&ButtonClass, {}, "320 x 200"},
-	{&ButtonClass, {}, "512 x 384"},
-	{&ButtonClass, {}, "640 x 400"},
-	{&ButtonClass, {}, "640 x 480"},
-	{&ButtonClass, {}, "Integer"},
-	{&ButtonClass, {}, "Scale"},
-	{&ButtonClass, {}, "Stretch"},
-	{&CheckBoxClass, {}, "Filtering"},
-	{&ButtonClass, {}, "Done"},
+	{&ButtonClass, {0}, "320 x 200"},
+	{&ButtonClass, {0}, "512 x 384"},
+	{&ButtonClass, {0}, "640 x 400"},
+	{&ButtonClass, {0}, "640 x 480"},
+	{&ButtonClass, {0}, "Integer"},
+	{&ButtonClass, {0}, "Scale"},
+	{&ButtonClass, {0}, "Stretch"},
+	{&CheckBoxClass, {0}, "Filtering"},
+	{&ButtonClass, {0}, "Done"},
 };
 
 

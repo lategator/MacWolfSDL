@@ -1,6 +1,18 @@
 #pragma once
 
 #include <stdint.h>
+#ifdef _WIN32
+#include <intrin.h>
+#endif
+
+#ifdef _MSC_VER
+#define __attribute__(...)
+#define __builtin_unreachable(...) (__assume(false))
+#define __builtin_strlen strlen
+#define __builtin_bswap16 _byteswap_ushort
+#define __builtin_bswap32 _byteswap_ulong
+extern char *stpcpy(char *restrict dst, const char *restrict src);
+#endif
 
 typedef uint16_t Word;
 typedef uint32_t LongWord;
@@ -55,7 +67,7 @@ void DLZSS(Byte *restrict Dest,LongWord DstLen,const Byte *restrict Src,LongWord
 
 #define ARRAYLEN(a) (sizeof((a)) / sizeof((a)[0]))
 
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#if !defined(_MSC_VER) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define SwapLongLE(__x) __builtin_bswap32(__x)
 #define SwapUShortLE(__x) __builtin_bswap16(__x)
 #define SwapShortLE(__x) ((int16_t)(__builtin_bswap16(__x)))
@@ -96,7 +108,6 @@ void FontSetClip(const Rect *Rect);
 void FontSetColor(Word Color);
 void DrawAString(const char *TextPtr);
 void DrawAChar(Word Letter);
-void ultoa(LongWord Val,char *TextPtr);
 Word GetRandom(Word Range);
 void Randomize(void);
 void DrawShape(Word x,Word y,void *ShapePtr);

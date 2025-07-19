@@ -87,19 +87,21 @@ void InitResources(void)
 		return;
 	{
 		BasePath = PrefPath();
-		char TmpPath[strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1];
+		char *TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1);
 		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
 		MainResources = LoadResources(TmpPath, &ResourceCache);
 		if (!MainResources && errno != ENOENT)
 			BailOut("%s: %s", TmpPath, strerror(errno));
+		FreeSomeMem(TmpPath);
 	}
 	if (!MainResources) {
 		BasePath = SDL_GetBasePath();
-		char TmpPath[strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1];
+		char *TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1);
 		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
 		MainResources = LoadResources(TmpPath, &ResourceCache);
 		if (!MainResources)
 			BailOut("%s: %s", TmpPath, strerror(errno));
+		FreeSomeMem(TmpPath);
 	}
 }
 
@@ -144,15 +146,17 @@ void EnumerateLevels(SDL_EnumerateDirectoryCallback callback, void *userdata)
 	const char *BasePath;
 	{
 		BasePath = PrefPath();
-		char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1];
+		char* TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1);
 		stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
 		SDL_EnumerateDirectory(TmpPath, callback, userdata);
+		FreeSomeMem(TmpPath);
 	}
 	{
 		BasePath = SDL_GetBasePath();
-		char TmpPath[strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1];
+		char* TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1);
 		stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
 		SDL_EnumerateDirectory(TmpPath, callback, userdata);
+		FreeSomeMem(TmpPath);
 	}
 }
 
@@ -492,7 +496,7 @@ static void ReleaseSounds(void)
 	if (SoundCache) {
 		for (i = 0; i < NumSounds; i++)
 			if (SoundCache[i].data)
-				SDL_free(SoundCache[i].data - 42);
+				SDL_free((Byte*)SoundCache[i].data - 42);
 		SDL_free(SoundCache);
 		SoundCache = NULL;
 		NumSounds = 0;
@@ -603,7 +607,7 @@ void MacLoadSoundFont(void)
 			Ret = SDL_ConvertAudioSamples(
 				&(SDL_AudioSpec){SDL_AUDIO_U8, 1, Sounds[j].samplerate}, Sounds[j].data, Sounds[j].size,
 				&(SDL_AudioSpec){SDL_AUDIO_F32, 1, Sounds[j].samplerate}, &Data, &DstLen);
-			SDL_free(Sounds[j].data - 42);
+			SDL_free((Byte*)Sounds[j].data - 42);
 			Sounds[j].data = NULL;
 			if (!Ret)
 				continue;
@@ -764,7 +768,7 @@ SDL_Surface *LoadPict(RFILE *Rp, Word PicNum)
 		Colors[i].g = SwapUShortBE(PalPtr[i*4+1])/0x101;
 		Colors[i].b = SwapUShortBE(PalPtr[i*4+2])/0x101;
 		Colors[i].a = 255;
-	} while (++i<255);
+	} while (++i<256);
 	SDL_SetPaletteColors(Palette, Colors, 0, 256);
 Done:
 	if (Pixels)
