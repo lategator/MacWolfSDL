@@ -3,7 +3,17 @@
 #include "WolfDef.h"
 #include "ini.h"
 #include <stdlib.h>
-#include <fluidsynth.h>
+
+#define TML_IMPLEMENTATION
+#define TML_NO_STDIO
+#define TML_MALLOC AllocSomeMem
+#define TML_REALLOC SDL_realloc
+#define TML_FREE FreeSomeMem
+#define TML_MEMCPY SDL_memcpy
+#include "tml.h"
+
+#define TSF_NO_STDIO
+#include "tsf.h"
 
 static const char *PrefOrg = NULL;
 static const char *PrefApp = "macwolfsdl";
@@ -32,10 +42,10 @@ static SDL_Palette *ScreenPalette = NULL;
 static SDL_AudioDeviceID SdlAudioDevice = 0;
 static SDL_AudioStream *SdlSfxChannels[NAUDIOCHANS] = { NULL };
 static SDL_AudioStream *SdlMusicStream;
-static fluid_settings_t *FluidSettings;
-fluid_synth_t *FluidSynth;
-static fluid_player_t *FluidPlayer;
-static Byte *MusicBuffer = NULL;
+static double SongMSecs;
+static tml_message *SongMidiMessages = NULL;
+static tml_message *SongCurrent;
+static float *MusicBuffer = NULL;
 static LongWord MusicBufferFrames = 0;
 static Word SdlSfxNums[NAUDIOCHANS];
 static Byte *GameShapeBuffer = NULL;
@@ -43,11 +53,11 @@ static char *MyPrefPath = NULL;
 static SDL_Storage *MyPrefStorage = NULL;
 char *SaveFileName = NULL;
 
+extern tsf *MusicSynth;
 extern int SelectedMenu;
 
 static void CloseAudio(void);
 static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt);
-static void FluidError(int Level, const char *Msg, void *Data);
 static void ProcessMusic(void *User, SDL_AudioStream *Stream, int Needed, int Total);
 void MacLoadSoundFont(void);
 
@@ -67,18 +77,10 @@ void InitTools(void)
 		SDL_free(Gamepads);
 	}
 	LoadPrefs();
-	fluid_set_log_function(FLUID_PANIC, FluidError, NULL);
-	fluid_set_log_function(FLUID_ERR, NULL, NULL);
-	fluid_set_log_function(FLUID_WARN, NULL, NULL);
-	fluid_set_log_function(FLUID_INFO, NULL, NULL);
-	FluidSettings = new_fluid_settings();
-	if (FluidSettings) {
-		FluidSynth = new_fluid_synth(FluidSettings);
-	}
-	ChangeAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
 	InitResources();
-	GetTableMemory();
 	MacLoadSoundFont();
+	ChangeAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+	GetTableMemory();
 	LoadMapSetData();
 	NewGameWindow(2);				/* Create a game window at 512x384 */
 	ClearTheScreen(BLACK);			/* Force the offscreen memory blank */
@@ -156,12 +158,10 @@ static void Cleanup(int status)
 		SDL_free(Gamepads);
 	}
 	CloseAudio();
-	if (FluidPlayer)
-		delete_fluid_player(FluidPlayer);
-	if (FluidSynth)
-		delete_fluid_synth(FluidSynth);
-	if (FluidSettings)
-		delete_fluid_settings(FluidSettings);
+	if (SongMidiMessages)
+		tml_free(SongMidiMessages);
+	if (MusicSynth)
+		tsf_close(MusicSynth);
 	if (ScreenSurface)
 		SDL_DestroySurface(ScreenSurface);
 	if (UISurface)
@@ -203,11 +203,6 @@ void BailOut(const char *Fmt, ...)
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal Error", Buf, SdlWindow);
 	va_end(Args);
 	Cleanup(1);
-}
-
-static void FluidError(int Level, const char *Msg, void *Data)
-{
-	BailOut("FluidSynth: %s", Msg);
 }
 
 static void ClearScreenTexture(void)
@@ -1366,15 +1361,44 @@ void SavePrefs(void)
 
 static void ProcessMusic(void *User, SDL_AudioStream *Stream, int Needed, int Total)
 {
-	int FramesLeft, n;
+	int FramesLeft, m, n, i;
+	float *Buf;
 
-	FramesLeft = (Needed + (2 * sizeof(int16_t))-1) / (2 * sizeof(int16_t));
+	FramesLeft = Needed / (2 * sizeof(float));
 	while (FramesLeft > 0) {
-		n = FramesLeft < MusicBufferFrames ? FramesLeft : MusicBufferFrames;
-		if (fluid_synth_write_s16(FluidSynth, n, MusicBuffer, 0, 2, MusicBuffer, 1, 2) == FLUID_FAILED)
-			break;
-		SDL_PutAudioStreamData(Stream, MusicBuffer, n * (2 * sizeof(int16_t)));
-		FramesLeft -= n;
+		m = SDL_min(FramesLeft, MusicBufferFrames);
+		Buf = MusicBuffer;
+		for (i = 64, n = m; n > 0; n -= i, Buf += i*2) {
+			if (i > n) i = n;
+			for (SongMSecs += i * (1000.0 / 44100.0); SongCurrent && SongMSecs >= SongCurrent->time;) {
+				switch (SongCurrent->type) {
+					case TML_PROGRAM_CHANGE:
+						tsf_channel_set_presetnumber(MusicSynth, SongCurrent->channel, SongCurrent->program, (SongCurrent->channel == 9));
+						break;
+					case TML_NOTE_ON:
+						tsf_channel_note_on(MusicSynth, SongCurrent->channel, SongCurrent->key, SongCurrent->velocity / 127.0f);
+						break;
+					case TML_NOTE_OFF:
+						tsf_channel_note_off(MusicSynth, SongCurrent->channel, SongCurrent->key);
+						break;
+					case TML_PITCH_BEND:
+						tsf_channel_set_pitchwheel(MusicSynth, SongCurrent->channel, SongCurrent->pitch_bend);
+						break;
+					case TML_CONTROL_CHANGE:
+						tsf_channel_midi_control(MusicSynth, SongCurrent->channel, SongCurrent->control, SongCurrent->control_value);
+						break;
+				}
+				if (SongCurrent->next) {
+					SongCurrent = SongCurrent->next;
+				} else {
+					SongMSecs -= SongCurrent->time;
+					SongCurrent = SongMidiMessages;
+				}
+			}
+			tsf_render_float(MusicSynth, Buf, i, 0);
+		}
+		SDL_PutAudioStreamData(Stream, MusicBuffer, m * (2 * sizeof(float)));
+		FramesLeft -= m;
 	}
 }
 
@@ -1388,7 +1412,7 @@ static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt)
 		.freq = 22254,
 	};
 	static const SDL_AudioSpec MusicFmt = {
-		.format = SDL_AUDIO_S16,
+		.format = SDL_AUDIO_F32,
 		.channels = 2,
 		.freq = 44100,
 	};
@@ -1405,15 +1429,17 @@ static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt)
 	SdlMusicStream = SDL_CreateAudioStream(&MusicFmt, &RealFmt);
 	if (!SdlMusicStream)
 		goto Fail;
-if (FluidSynth) {
-		MusicBufferFrames = (LongWord)BufSize * 2;
-		MusicBuffer = AllocSomeMem(MusicBufferFrames * 2 * sizeof(int16_t));
+	SDL_SetAudioStreamGain(SdlMusicStream, 0.5);
+	if (MusicSynth) {
+		MusicBufferFrames = (LongWord)BufSize * 2; 		/* Add extra overflow space on the end */
+		MusicBuffer = AllocSomeMem(MusicBufferFrames * 2 * sizeof(float));
 	}
 	for (int i = 0; i < NAUDIOCHANS; i++) {
 		SdlSfxNums[i] = -1;
 		SdlSfxChannels[i] = SDL_CreateAudioStream(&MacSndFmt, &RealFmt);
 		if (!SdlSfxChannels[i])
 			goto Fail;
+		SDL_SetAudioStreamGain(SdlSfxChannels[i], 0.75);
 	}
 
 	if (!SDL_BindAudioStream(SdlAudioDevice, SdlMusicStream))
@@ -1456,8 +1482,6 @@ void PauseSoundMusicSystem(void)
 {
 	if (!SdlAudioDevice)
 		return;
-	if (FluidPlayer)
-		fluid_player_stop(FluidPlayer);
 	SDL_PauseAudioDevice(SdlAudioDevice);
 	EndAllSound();
 }
@@ -1466,8 +1490,6 @@ void ResumeSoundMusicSystem(void)
 {
 	if (!SdlAudioDevice)
 		return;
-	if (FluidPlayer && fluid_player_get_status(FluidPlayer) != FLUID_PLAYER_PLAYING)
-		fluid_player_play(FluidPlayer);
 	SDL_ResumeAudioDevice(SdlAudioDevice);
 }
 
@@ -1476,36 +1498,34 @@ void BeginSongLooped(Word Song)
 	Byte *Data;
 	LongWord Len;
 
-	if (!FluidSynth)
+	if (!MusicSynth)
 		return;
-	if (FluidPlayer) {
+	if (SongMidiMessages) {
 		SDL_SetAudioStreamGetCallback(SdlMusicStream, NULL, NULL);
-		delete_fluid_player(FluidPlayer);
-		FluidPlayer = NULL;
+		tml_free(SongMidiMessages);
+		SongMidiMessages = NULL;
 	}
-	fluid_synth_system_reset(FluidSynth);
+	tsf_reset(MusicSynth);
 	Data = LoadSong(Song, &Len);
 	if (!Data)
 		return;
-	FluidPlayer = new_fluid_player(FluidSynth);
-	if (FluidPlayer) {
-		if (fluid_player_add_mem(FluidPlayer, Data, Len) != FLUID_FAILED) {
-			fluid_player_set_loop(FluidPlayer, -1);
-			fluid_player_play(FluidPlayer);
-			SDL_SetAudioStreamGetCallback(SdlMusicStream, ProcessMusic, NULL);
-		}
+	SongMidiMessages = tml_load_memory(Data, Len);
+	if (SongMidiMessages) {
+		SongMSecs = 0;
+		SongCurrent = SongMidiMessages;
+		SDL_SetAudioStreamGetCallback(SdlMusicStream, ProcessMusic, NULL);
 	}
 	SDL_free(Data);
 }
 
 void EndSong(void)
 {
-	if (!FluidPlayer || !SdlAudioDevice)
+	if (!SongMidiMessages || !SdlAudioDevice)
 		return;
 	SDL_SetAudioStreamGetCallback(SdlMusicStream, NULL, NULL);
-	delete_fluid_player(FluidPlayer);
-	fluid_synth_system_reset(FluidSynth);
-	FluidPlayer = NULL;
+	tml_free(SongMidiMessages);
+	tsf_reset(MusicSynth);
+	SongMidiMessages = NULL;
 }
 
 void BeginSound(Word SoundNum)

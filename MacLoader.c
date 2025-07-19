@@ -2,7 +2,22 @@
 #include "SDLWolf.h"
 #include <string.h>
 #include <errno.h>
-#include <fluidsynth.h>
+
+#define TSF_IMPLEMENTATION
+#define TSF_NO_STDIO
+#define TSF_MALLOC AllocSomeMem
+#define TSF_REALLOC SDL_realloc
+#define TSF_FREE FreeSomeMem
+#define TSF_MEMCPY SDL_memcpy
+#define TSF_MEMSET SDL_memset
+#define TSF_POW SDL_pow
+#define TSF_POWF SDL_powf
+#define TSF_EXPF SDL_expf
+#define TSF_LOG SDL_log
+#define TSF_TAN SDL_tan
+#define TSF_LOG10 SDL_log10
+#define TSF_SQRTF SDL_sqrtf
+#include "tsf.h"
 
 typedef struct {
 	void *data;
@@ -26,8 +41,7 @@ static RFILE *LevelResources = NULL;
 static Resource *LevelResourceCache = NULL;
 static LongWord NumSounds = 0;
 static Sound *SoundCache = NULL;
-
-extern fluid_synth_t *FluidSynth;
+tsf *MusicSynth;
 
 static void ReleaseSounds(void);
 
@@ -533,191 +547,99 @@ Byte *LoadSong(Word RezNum, LongWord *Len)
 	return ReadResource(RezNum, MidiType, MainResources, Len);
 }
 
-typedef struct {
-	Word ID;
-	Word flags;
-	Byte basenote;
-	fluid_preset_t *preset;
-	fluid_sample_t *sample;
-} Instrument;
-
-typedef struct {
-	Word iter;
-	Word ninstruments;
-	Word nsounds;
-	Instrument instruments[];
-} SFHeader;
-
-static const char *SoundFontGetName()
-{
-	return "";
-}
-
-static fluid_preset_t *SoundFontGetPreset(fluid_sfont_t *SFont, int Bank, int Prog)
-{
-	int i;
-	SFHeader *Header = fluid_sfont_get_data(SFont);
-	for (i = 0; i < Header->ninstruments; i++)
-		if (Header->instruments[i].ID == Prog)
-			return Header->instruments[i].preset;
-	return NULL;
-}
-
-static void SoundFontIterStart(fluid_sfont_t *SFont)
-{
-	SFHeader *Header = fluid_sfont_get_data(SFont);
-	Header->iter =0;
-}
-
-static fluid_preset_t *SoundFontIterNext(fluid_sfont_t *SFont)
-{
-	SFHeader *Header = fluid_sfont_get_data(SFont);
-	if (Header->iter >= Header->ninstruments)
-		return NULL;
-	return Header->instruments[Header->iter++].preset;
-}
-
-static int PresetGetBank(fluid_preset_t *Preset)
-{
-	return 0;
-}
-
-static int PresetGetProg(fluid_preset_t *Preset)
-{
-	Instrument *Inst = fluid_preset_get_data(Preset);
-	return Inst->ID;
-}
-
-static int PresetNoteOn(fluid_preset_t *Preset, fluid_synth_t *Synth, int Chan, int Key, int Vel)
-{
-	fluid_voice_t *Voice;
-	Instrument *Inst = fluid_preset_get_data(Preset);
-	if (Inst->flags & 0x04)
-		fluid_synth_all_sounds_off(Synth, Chan);
-	if (Inst->flags & 0x40)
-		Key = Inst->basenote;
-	Voice = fluid_synth_alloc_voice(Synth, Inst->sample, Chan, Key, Vel);
-	if (!Voice)
-		return FLUID_FAILED;
-	if (!(Inst->flags & 0x2000))
-		fluid_voice_gen_set(Voice, GEN_SAMPLEMODE, 1);
-	fluid_voice_gen_set(Voice, GEN_VOLENVRELEASE, 4000.f);
-	fluid_voice_gen_set(Voice, GEN_VOLENVDECAY, 8000.f);
-	fluid_voice_gen_set(Voice, GEN_VOLENVHOLD, 5000.f);
-	fluid_synth_start_voice(Synth, Voice);
-	return FLUID_OK;
-}
-static void PresetFree(fluid_preset_t *Preset)
-{
-}
-
-static int SoundFontFree(fluid_sfont_t *SFont)
-{
-	SFHeader *Header;
-	int i;
-	Sound *Sounds;
-
-	Header = fluid_sfont_get_data(SFont);
-	for (i = 0; i < Header->ninstruments; i++) {
-		if (Header->instruments[i].preset)
-			delete_fluid_preset(Header->instruments[i].preset);
-		if (Header->instruments[i].sample)
-			delete_fluid_sample(Header->instruments[i].sample);
-	}
-	Sounds = (void*)&Header->instruments[Header->ninstruments];
-	for (i = 0; i < Header->nsounds; i++) {
-		if (Sounds[i].data)
-			SDL_free(Sounds[i].data);
-	}
-	SDL_free(Header);
-	delete_fluid_sfont(SFont);
-	return 0;
-}
-
 void MacLoadSoundFont(void)
 {
 	size_t i, j;
 	Byte Buf[22];
 	ResAttr Attr;
-	SFHeader *Header;
-	Instrument *Instruments;
+	int NSounds;
 	Sound *Sounds;
-	fluid_sfont_t *SoundFont;
-	fluid_preset_t *Preset;
-	fluid_sample_t *Sample;
 	Word SoundID;
 	Uint8 *Data;
+	size_t FloatBufferSize;
+	struct tsf_region *Region;
 	int DstLen;
 	bool Ret;
+	Word Flags;
+	Byte BaseNote;
 
-	if (!FluidSynth)
-		return;
 	i = res_count(MainResources, InstType);
 	if (!i)
 		return;
-	SoundFont = new_fluid_sfont(SoundFontGetName, SoundFontGetPreset, SoundFontIterStart, SoundFontIterNext, SoundFontFree);
-	if (!SoundFont)
-		return;
+	MusicSynth = TSF_MALLOC(sizeof(tsf));
+	memset(MusicSynth, 0, sizeof(tsf));
+	MusicSynth->presetNum = i;
+	MusicSynth->presets = TSF_MALLOC(MusicSynth->presetNum*sizeof(struct tsf_preset));
+	memset(MusicSynth->presets, 0, MusicSynth->presetNum*sizeof(struct tsf_preset));
+	for (i = 0; i < MusicSynth->presetNum; i++) {
+		MusicSynth->presets[i].regionNum = 1;
+		MusicSynth->presets[i].regions = TSF_MALLOC(sizeof(struct tsf_region));
+		tsf_region_clear(MusicSynth->presets[i].regions, TSF_FALSE);
+	}
+	tsf_set_max_voices(MusicSynth, 8);
+	for (i = 0; i < 16; i++)
+		tsf_channel_set_bank(MusicSynth, i, 0);
+	tsf_set_output(MusicSynth, TSF_STEREO_INTERLEAVED, 44100, 0.f);
 
-	Header = AllocSomeMem(sizeof(SFHeader)+i*(sizeof(Instrument)+sizeof(Sound)));
-	Header->ninstruments = i;
-	Header->nsounds = 0;
-	Header->iter = 0;
-	Instruments = Header->instruments;
-	Sounds = (void*)&Instruments[i];
-	for (i = 0; i < Header->ninstruments; i++) {
-		Instruments[i].preset = NULL;
-		Instruments[i].ID = -1;
+	NSounds = 0;
+	Sounds = AllocSomeMem(MusicSynth->presetNum*sizeof(Sound));
+	FloatBufferSize = 0;
+	if (!Sounds) BailOut("Out of memory");
+	for (i = 0; i < MusicSynth->presetNum; i++) {
 		if (!res_list(MainResources, InstType, &Attr, i, 1, NULL, NULL))
 			continue;
-		Instruments[i].ID = Attr.ID;
 		if (Attr.size < sizeof Buf)
 			continue;
 		if (!res_read_ind(MainResources, InstType, i, Buf, 0, sizeof Buf, NULL, NULL))
 			continue;
-		Instruments[i].flags = (Buf[5]<<8)|Buf[6];
-		Instruments[i].basenote = Buf[3];
-		Preset = new_fluid_preset(SoundFont, SoundFontGetName, PresetGetBank, PresetGetProg, PresetNoteOn, PresetFree);
-		if (!Preset)
-			continue;
-		Sample = new_fluid_sample();
-		if (!Sample) {
-			delete_fluid_preset(Preset);
-			continue;
-		}
-		Instruments[i].preset = Preset;
-		Instruments[i].sample = Sample;
 		SoundID = SwapUShortBE(*(u_uint16_t*)&Buf[0]);
-		for (j = 0; j < Header->nsounds; j++) {
+		for (j = 0; j < NSounds; j++) {
 			if (Sounds[j].ID == SoundID)
 				break;
 		}
-		if (j == Header->nsounds) {
+		if (j == NSounds) {
 			if (!LoadSound(MainResources, &Sounds[j], SoundID))
 				continue;
 			Ret = SDL_ConvertAudioSamples(
 				&(SDL_AudioSpec){SDL_AUDIO_U8, 1, Sounds[j].samplerate}, Sounds[j].data, Sounds[j].size,
-				&(SDL_AudioSpec){SDL_AUDIO_S16, 1, Sounds[j].samplerate}, &Data, &DstLen);
+				&(SDL_AudioSpec){SDL_AUDIO_F32, 1, Sounds[j].samplerate}, &Data, &DstLen);
 			SDL_free(Sounds[j].data - 42);
+			Sounds[j].data = NULL;
 			if (!Ret)
 				continue;
-			Sounds[j].data = Data;
-			Header->nsounds++;
+			DstLen /= sizeof(float);
+			Sounds[j].offset = FloatBufferSize;
+			FloatBufferSize += DstLen + 46;
+			MusicSynth->fontSamples = SDL_realloc(MusicSynth->fontSamples, FloatBufferSize*sizeof(float));
+			if (!MusicSynth->fontSamples) BailOut("Out of memory");
+			memcpy(MusicSynth->fontSamples+Sounds[j].offset, Data, DstLen*sizeof(float));
+			memset(MusicSynth->fontSamples+Sounds[j].offset+DstLen, 0, 46*sizeof(float));
+			SDL_free(Data);
+			NSounds++;
 		}
-		fluid_sample_set_sound_data(Sample, Sounds[j].data, NULL, Sounds[j].size,
-								(Instruments[i].flags & 0x800) ? Sounds[j].samplerate : 22254, 0);
-		fluid_sample_set_pitch(Sample, Instruments[i].basenote ? Instruments[i].basenote : Sounds[j].basenote, 0);
-		if (!(Instruments[i].flags & 0x2000))
-			fluid_sample_set_loop(Sample, Sounds[j].loopstart, Sounds[j].loopend);
+		Flags = (Buf[5]<<8)|Buf[6];
+		BaseNote = Buf[3];
+		MusicSynth->presets[i].preset = Attr.ID;
+		Region = &MusicSynth->presets[i].regions[0];
+
+		Region->sample_rate = (Flags & 0x800) ? Sounds[j].samplerate : 22254;
+		Region->offset = Sounds[j].offset;
+		Region->end = Region->offset + Sounds[j].size;
+		Region->pitch_keycenter = BaseNote ? BaseNote : Sounds[j].basenote;
+		if (!(Flags & 0x2000) && Sounds[j].loopend - Sounds[j].loopstart >= 64) {
+			Region->loop_mode = TSF_LOOPMODE_CONTINUOUS;
+			Region->loop_start = Region->offset + Sounds[j].loopstart;
+			Region->loop_end = Region->offset + Sounds[j].loopend;
+		}
+		Region->ampenv.release = 4000.f;
+		Region->ampenv.decay = 8000.f;
+		Region->ampenv.hold = 5000.f;
+		if (Flags & 0x04)
+			Region->group = Attr.ID;
+		if (Flags & 0x40)
+			Region->pitch_keytrack = 0;
 	}
-	if (Header->nsounds != Header->ninstruments) {
-		Header = SDL_realloc(Header, sizeof(SFHeader)+Header->ninstruments*sizeof(Instrument)+Header->nsounds*sizeof(Sound));
-		if (!Header) BailOut("Out of memory");
-	}
-	for (i = 0; i < Header->ninstruments; i++)
-		fluid_preset_set_data(Header->instruments[i].preset, &Header->instruments[i]);
-	fluid_sfont_set_data(SoundFont, Header);
-	fluid_synth_add_sfont(FluidSynth, SoundFont);
+	FreeSomeMem(Sounds);
 }
 
 /**********************************

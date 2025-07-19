@@ -4,7 +4,7 @@ A source port of Macintosh Wolfenstein 3D to modern platforms using SDL3. Preser
 
 ## Building
 
-Required dependencies: `SDL3 fluidsynth meson ninja`
+Required dependencies: `SDL3 meson ninja`
 
 ```bash
 meson setup build

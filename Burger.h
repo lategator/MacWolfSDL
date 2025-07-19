@@ -129,6 +129,7 @@ typedef struct {
 	uint8_t basenote;
 	int loopstart;
 	int loopend;
+	LongWord offset;
 	LongWord size;
 	void *data;
 } Sound;
