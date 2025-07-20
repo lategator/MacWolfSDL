@@ -99,10 +99,15 @@ void InitResources(void)
 		char *TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1);
 		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
 		MainResources = LoadResources(TmpPath, &ResourceCache);
-		if (!MainResources)
-			BailOut("%s: %s", TmpPath, strerror(errno));
 		FreeSomeMem(TmpPath);
 	}
+	if (!MainResources)
+		BailOut("Resource file not found or not readable: '%s'\n\n"
+				"This file contains the Wolfenstein 3D assets and is required to run the game.\n"
+				"It must be copied from an installed executable of Wolfenstein 3D Third Encounter for Macintosh Classic.\n"
+				"The file format can be any of: MacBinary II, AppleSingle, AppleDouble, or a raw resource fork.\n\n"
+				"After extracting, it should be placed in the same folder as the executable, or in this folder:\n\n%s",
+				MainResourceFile, PrefPath());
 }
 
 void KillResources(void)

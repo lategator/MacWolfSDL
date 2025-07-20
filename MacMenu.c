@@ -395,7 +395,7 @@ static const Rect ScenarioListRect = {SCENARIOLISTY, SCENARIOLISTX, SCENARIOLIST
 static const LongWord ScenariosItemHeight = SCENARIOLISTH/16;
 static widget_t ScenarioWidgets[2] = {
 	{&VScrollBarClass,
-   {SCENARIOLISTY, SCENARIOLISTX+SCENARIOLISTW-1, SCENARIOLISTY+SCENARIOLISTH, SCENARIOLISTX+SCENARIOLISTW+15},
+	{SCENARIOLISTY, SCENARIOLISTX+SCENARIOLISTW-1, SCENARIOLISTY+SCENARIOLISTH, SCENARIOLISTX+SCENARIOLISTW+15},
 	&(scrollbar_t){&MenuScrollY, &ScenarioCount}},
 	{&ButtonClass, {288, 155, 308, 213}, "Cancel"}
 };
@@ -463,6 +463,13 @@ Word ChooseScenario(void)
 	Word RetVal = FALSE;
 
 	EnumerateLevels(MakeScenarioList, NULL);
+	if (!ScenarioCount)
+			BailOut("No scenario files found!\n\n"
+					"At least one scenario is required to play the game.\n"
+					"The base scenarios can be copied from the 'Levels' folder of an installed Wolfenstein 3D Third Encounter for Macintosh Classic.\n"
+					"The file format can be any of: MacBinary II, AppleSingle, AppleDouble, or a raw resource fork.\n\n"
+					"Scenarios can be placed in either of these folders:\n\n%sLevels\n%sLevels",
+					SDL_GetBasePath(), PrefPath());
 	qsort(Scenarios, ScenarioCount, sizeof(scenario_t), CompareScenario);
 	if (ScenarioPath) {
 		for (i = 0; i < ScenarioCount; i++) {
@@ -701,16 +708,16 @@ TryIt:
 
 	difficulty = MenuPosY;
 	if (NextScenarioPath) {
-	   if (ScenarioPath)
-		   SDL_free(ScenarioPath);
-	   ScenarioPath = NextScenarioPath;
-	   ClearFrameBuffer();
-	   RenderScreen();
-	   RetVal = MountMapFile(ScenarioPath);
-	   LoadMapSetData();
-	   playstate = EX_NEWGAME;	/* Start a new game */
-	   SaveFileName = 0;		/* Zap the save game name */
-   }
+		if (ScenarioPath)
+			SDL_free(ScenarioPath);
+		ScenarioPath = NextScenarioPath;
+		ClearFrameBuffer();
+		RenderScreen();
+		RetVal = MountMapFile(ScenarioPath);
+		LoadMapSetData();
+		playstate = EX_NEWGAME;	/* Start a new game */
+		SaveFileName = 0;		/* Zap the save game name */
+	}
 	return RetVal;
 }
 
@@ -950,7 +957,7 @@ TryIt:
 			SavePrefs();
 			return 1;
 		}
-	} else if (Selected >= 4 && Selected < 7)  {
+	} else if (Selected >= 4 && Selected < 7) {
 		if (ScreenScaleMode != Selected-4) {
 			ScreenScaleMode = Selected-4;
 			UpdateVideoSettings();
