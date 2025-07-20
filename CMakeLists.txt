@@ -1,11 +1,16 @@
 cmake_minimum_required(VERSION 3.24)
 include(FetchContent)
+include(CheckIPOSupported)
+
 project(MacWolfSDL C)
 set(CMAKE_C_STANDARD 23)
 
-if(APPLE)
-	set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
+check_ipo_supported(RESULT USE_IPO)
+if (USE_IPO)
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL TRUE)
 endif()
+
 option(SDL3_VENDORED "Vendor SDL3 library" OFF)
 if(NOT SDL3_VENDORED)
 	find_package(SDL3 3.2 QUIET)
@@ -43,6 +48,8 @@ add_executable(${exe_name} WIN32 MACOSX_BUNDLE
 	MacFont.c MacLoader.c MacMenu.c Missiles.c Music.c PlMove.c PlStuff.c
 	PlThink.c PushWall.c RefBsp.c Refresh2.c Refresh.c RefSprite.c SDLWolf.c
 	SetupScalers.c Sight.c SnesMain.c StateDef.c WolfIO.c WolfMain.c)
+target_link_libraries(${exe_name} PRIVATE SDL3::SDL3)
+
 if(WIN32)
 	target_sources(${exe_name} PRIVATE pkg/MacWolfSDL.rc)
 endif()
@@ -51,4 +58,3 @@ if(APPLE)
 	set_source_files_properties(pkg/MacWolfSDL.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 	set_property(TARGET ${exe_name} PROPERTY MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/pkg/Info.plist")
 endif()
-target_link_libraries(${exe_name} PRIVATE SDL3::SDL3)

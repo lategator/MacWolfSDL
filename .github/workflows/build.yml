@@ -6,8 +6,6 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  release:
-    types: [ created ]
   workflow_dispatch:
 
 jobs:
@@ -15,7 +13,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-    - run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=MinSizeRel .; if ($?) { cmake --build build }
+    - run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release .; if ($?) { cmake --build build }
+    - run: strip build/MacWolfSDL.exe
     - run: cd ./build; Compress-Archive -Path ./MacWolfSDL.exe,../LICENSES -DestinationPath ./macwolfsdl-win64-${{ github.sha }}.zip
     - uses: actions/upload-artifact@v4
       with: { name: macwolfsdl-win64, path: 'build/macwolfsdl-win64-${{ github.sha }}.zip' }
@@ -24,7 +23,8 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
-    - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel . && cmake --build build
+    - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" . && cmake --build build
+    - run: strip build/MacWolfSDL.app/Contents/MacOS/MacWolfSDL
     - run: cd ./build && hdiutil create -volname MacWolfSDL -srcfolder ./MacWolfSDL.app -srcfolder ../LICENSES -ov -format UDZO ./macwolfsdl-macos-${{ github.sha }}.dmg
     - uses: actions/upload-artifact@v4
       with: { name: macwolfsdl-macos, path: 'build/macwolfsdl-macos-${{ github.sha }}.dmg' }
@@ -40,7 +40,8 @@ jobs:
              libudev-dev libwayland-dev libx11-dev libxcursor-dev libxext-dev \
              libxfixes-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev \
              libxss-dev libxt-dev libxv-dev libxxf86vm-dev
-    - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel . && cmake --build build
+    - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release . && cmake --build build
+    - run: strip build/macwolfsdl
     - run: cd ./build && tar -czf ./macwolfsdl-ubuntu-x86_64-${{ github.sha }}.tar.gz ./macwolfsdl ../LICENSES
     - uses: actions/upload-artifact@v4
       with: { name: macwolfsdl-ubuntu-x86_64, path: 'build/macwolfsdl-ubuntu-x86_64-${{ github.sha }}.tar.gz' }
