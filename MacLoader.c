@@ -1002,9 +1002,9 @@ void MacLoadSoundFont(void)
 			Region->loop_start = Region->offset + Sounds[j].loopstart;
 			Region->loop_end = Region->offset + Sounds[j].loopend;
 		}
-		Region->ampenv.release = 4000.f;
-		Region->ampenv.decay = 8000.f;
-		Region->ampenv.hold = 5000.f;
+		Region->ampenv.release = 4.f;
+		Region->ampenv.decay = 8.f;
+		Region->ampenv.hold = 10.f;
 		if (Flags & 0x04)
 			Region->group = Res->ID;
 		if (Flags & 0x40)
