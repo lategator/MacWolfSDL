@@ -346,7 +346,7 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 	char *Path;
 	char *s;
 	const char *t;
-	RFILE *Rp;
+	ResourceFile *Rp;
 	scenario_t *Scenario;
 	size_t NameLen;
 	char c;
@@ -368,7 +368,7 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 
 	Path = AllocSomeMem(strlen(Dir) + strlen(Name) + 1);
 	stpcpy(stpcpy(Path, Dir), Name);
-	Rp = res_open(Path, 0);
+	Rp = LoadResourceForkFile(Path);
 	if (!Rp) {
 		SDL_free(NameBuf);
 		SDL_free(Path);
@@ -383,7 +383,7 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 	Scenario->name = NameBuf;
 	Scenario->pic = LoadPict(Rp, 1);
 
-	res_close(Rp);
+	ReleaseResources(Rp);
 	return SDL_ENUM_CONTINUE;
 }
 
@@ -470,7 +470,7 @@ Word ChooseScenario(void)
 					"The file format can be any of: MacBinary II, AppleSingle, AppleDouble, or a raw resource fork.\n\n"
 					"Scenarios can be placed in either of these folders:\n\n%sLevels\n%sLevels",
 					SDL_GetBasePath(), PrefPath());
-	qsort(Scenarios, ScenarioCount, sizeof(scenario_t), CompareScenario);
+	SDL_qsort(Scenarios, ScenarioCount, sizeof(scenario_t), CompareScenario);
 	if (ScenarioPath) {
 		for (i = 0; i < ScenarioCount; i++) {
 #if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_APPLE)

@@ -1,7 +1,6 @@
 #include "SDLWolf.h"
 #include "Burger.h"
 #include "WolfDef.h"
-#include "ini.h"
 #include <stdlib.h>
 
 #define TML_IMPLEMENTATION
@@ -14,6 +13,12 @@
 
 #define TSF_NO_STDIO
 #include "tsf.h"
+
+#define INI_CUSTOM_ALLOCATOR 1
+#define ini_malloc AllocSomeMem
+#define ini_realloc SDL_realloc
+#define ini_free FreeSomeMem
+#include "ini.c"
 
 static const char *PrefOrg = NULL;
 static const char *PrefApp = "macwolfsdl";
@@ -1551,7 +1556,7 @@ void BeginSongLooped(Word Song)
 		SongCurrent = SongMidiMessages;
 		SDL_SetAudioStreamGetCallback(SdlMusicStream, ProcessMusic, NULL);
 	}
-	SDL_free(Data);
+	FreeSomeMem(Data);
 }
 
 void EndSong(void)

@@ -42,8 +42,7 @@ add_executable(${exe_name} WIN32 MACOSX_BUNDLE
 	Burger.c Data.c Doors.c EnMove.c EnThink.c InterMis.c Intro.c Level.c
 	MacFont.c MacLoader.c MacMenu.c Missiles.c Music.c PlMove.c PlStuff.c
 	PlThink.c PushWall.c RefBsp.c Refresh2.c Refresh.c RefSprite.c SDLWolf.c
-	SetupScalers.c Sight.c SnesMain.c StateDef.c WolfIO.c WolfMain.c
-	ini.c res.c)
+	SetupScalers.c Sight.c SnesMain.c StateDef.c WolfIO.c WolfMain.c)
 if(WIN32)
 	target_sources(${exe_name} PRIVATE pkg/MacWolfSDL.rc)
 endif()

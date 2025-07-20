@@ -20,14 +20,9 @@
 #define TSF_SQRTF SDL_sqrtf
 #include "tsf.h"
 
-typedef struct {
-	void *data;
-	uint32_t refcount;
-} Resource;
-
 static const char *MainResourceFile = "Wolf3D.rsrc";
 static const char *LevelsFolder = "Levels/";
-static const char *DefaultLevelsPath = "Levels/_Second_Encounter_(30_Levels).rsrc";
+static const char *DefaultLevelsPath = "Levels/ Second Encounter (30 Levels).rsrc";
 
 static const uint32_t BrgrType = 0x42524752; /* BRGR */
 static const uint32_t PictType = 0x50494354; /* PICT */
@@ -36,41 +31,244 @@ static const uint32_t CsndType = 0x63736E64; /* csnd */
 static const uint32_t MidiType = 0x4d696469; /* Midi */
 static const uint32_t InstType = 0x494E5354; /* INST */
 
-RFILE *MainResources = NULL;
-static Resource *ResourceCache = NULL;
-static RFILE *LevelResources = NULL;
-static Resource *LevelResourceCache = NULL;
+ResourceFile *MainResources = NULL;
+static ResourceFile *LevelResources = NULL;
 static LongWord NumSounds = 0;
 static Sound *SoundCache = NULL;
 tsf *MusicSynth;
 
+static ResourceFile *LoadResourceFork(FILE *File, long BaseOffset);
+static ResourceFile *LoadMacBinary(FILE *File);
+static ResourceFile *LoadAppleSingle(FILE *File);
 static void ReleaseSounds(void);
-static RFILE *LoadMacBinary(const char *FileName);
-static RFILE *LoadAppleSingle(const char *FileName);
 
-static RFILE *LoadResources(const char *FileName, Resource **CacheOut)
+static ResourceFile *LoadResources(const char *FileName)
 {
-	size_t Count;
-	RFILE *Rp;
-	Resource *Cache;
+	FILE *File;
+	ResourceFile *Rp;
 
-	Rp = res_open(FileName, 0);
+	File = fopen(FileName, "rb");
+	if (!File)
+		return NULL;
+	Rp = LoadMacBinary(File);
 	if (!Rp) {
-		Rp = LoadMacBinary(FileName);
+		fseek(File, 0, SEEK_SET);
+		Rp = LoadAppleSingle(File);
 		if (!Rp) {
-			Rp = LoadAppleSingle(FileName);
-			if (!Rp)
-				return NULL;
+			fseek(File, 0, SEEK_SET);
+			Rp = LoadResourceFork(File, 0);
 		}
 	}
-	Count = res_count(Rp, BrgrType);
-	Cache = SDL_calloc(Count, sizeof(Resource));
-	if (!Cache) {
-		res_close(Rp);
+	if (!Rp)
+		fclose(File);
+	return Rp;
+}
+
+#pragma pack(push, r1, 1)
+typedef struct {
+	LongWord DataOffset;
+	LongWord MapOffset;
+	LongWord DataLen;
+	LongWord MapLen;
+} ResourceHeader;
+
+typedef struct {
+	ResourceHeader Header;
+	LongWord NextMap;
+	Word RefNum;
+	Word Attributes;
+	Word TypeListOffset;
+	Word NameListOffset;
+} ResourceMap;
+
+typedef struct {
+	LongWord Type;
+	Word Count;
+	Word RefListOffset;
+} ResourceType;
+
+typedef struct {
+	Word NumTypes;
+	ResourceType Types[];
+} ResourceTypeList;
+
+typedef struct {
+	Word ID;
+	Word NameOffset;
+	Byte Attributes;
+	Byte DataOffset[3];
+	LongWord Handle;
+} ResourceRef;
+#pragma pack(pop, r1)
+
+typedef struct {
+	void *Data;
+	long Offset;
+	LongWord RefCount;
+	LongWord Size;
+	Word ID;
+} Resource;
+
+typedef struct {
+	LongWord Type;
+	Word Count;
+	Resource *Refs;
+} ResourceGroup;
+
+struct ResourceFile {
+	FILE *File;
+	Word NumGroups;
+	ResourceGroup Groups[];
+};
+
+static void *ReadAtOffset(FILE *File, LongWord Offset, LongWord Size)
+{
+	void *Buf;
+
+	if (fseek(File, Offset, SEEK_SET))
+		return NULL;
+	Buf = AllocSomeMem(Size);
+	if (fread(Buf, 1, Size, File) != Size) {
+		FreeSomeMem(Buf);
 		return NULL;
 	}
-	*CacheOut = Cache;
+	return Buf;
+}
+
+ResourceFile *LoadResourceForkFile(const char *FileName)
+{
+	FILE *File;
+
+	File = fopen(FileName, "rb");
+	if (!File)
+		return NULL;
+	return LoadResourceFork(File, 0);
+}
+
+static int SortResourceTypes(const void *a, const void *b)
+{
+	LongWord ua, ub;
+
+	ua = ((const ResourceType *)a)->Type;
+	ub = ((const ResourceType *)b)->Type;
+	return ua == ub ? 0 : (ua < ub ? -1 : 1);
+}
+
+static int SortResourceRefs(const void *a, const void *b)
+{
+	int ua, ub;
+
+	ua = ((const ResourceRef *)a)->ID;
+	ub = ((const ResourceRef *)b)->ID;
+	return ua - ub;
+}
+
+static ResourceFile *LoadResourceFork(FILE *File, long BaseOffset)
+{
+	ResourceHeader Header;
+	Byte *Map;
+	ResourceMap *MapHead;
+	ResourceTypeList *TypeList;
+	ResourceType *Type;
+	ResourceRef *Ref;
+	ResourceFile *Rp = NULL;
+	ResourceGroup *Group;
+	Resource *Res;
+	LongWord TotalCount = 0;
+	LongWord TotalSize;
+	LongWord RefSize;
+	int i, j;
+
+	if (fseek(File, BaseOffset, SEEK_SET))
+		return NULL;
+	if (fread(&Header, 1, sizeof Header, File) != sizeof Header)
+		goto Done;
+
+	Header.DataOffset = SwapLongBE(Header.DataOffset);
+	Header.MapOffset = SwapLongBE(Header.MapOffset);
+	Header.DataLen = SwapLongBE(Header.DataLen);
+	Header.MapLen = SwapLongBE(Header.MapLen);
+
+	Map = ReadAtOffset(File, BaseOffset + Header.MapOffset, Header.MapLen);
+	if (!Map)
+		goto Done;
+	MapHead = (void*)Map;
+	MapHead->TypeListOffset = SwapUShortBE(MapHead->TypeListOffset);
+	if (MapHead->TypeListOffset + 2 > Header.MapLen)
+		goto Done;
+	TypeList = (void*)(Map + MapHead->TypeListOffset);
+	TypeList->NumTypes = SwapUShortBE(TypeList->NumTypes);
+	if (MapHead->TypeListOffset + sizeof(ResourceTypeList) + (TypeList->NumTypes+1)*sizeof(ResourceType) > Header.MapLen)
+		goto Done;
+	Type = TypeList->Types;
+	for (i = 0; i < TypeList->NumTypes+1; i++, Type++) {
+		Type->Type = SwapLongBE(Type->Type);
+		Type->RefListOffset = SwapUShortBE(Type->RefListOffset);
+		Type->Count = SwapUShortBE(Type->Count);
+		if (MapHead->TypeListOffset + Type->RefListOffset + (Type->Count + 1)*sizeof(ResourceRef) > Header.MapLen)
+			goto Done;
+		TotalCount += Type->Count+1;
+		Ref = (void*)(Map + MapHead->TypeListOffset + Type->RefListOffset);
+		for (j = 0; j < Type->Count + 1; j++, Ref++) {
+			Ref->ID = SwapUShortBE(Ref->ID);
+			Ref->Handle = (Ref->DataOffset[0]<<16)|(Ref->DataOffset[1]<<8)|Ref->DataOffset[2];
+			if (Ref->Handle > Header.DataLen - 4)
+				goto Done;
+		}
+		Ref = (void*)(Map + MapHead->TypeListOffset + Type->RefListOffset);
+		SDL_qsort(Ref, Type->Count+1, sizeof(ResourceRef), SortResourceRefs);
+	}
+	SDL_qsort(TypeList->Types, TypeList->NumTypes+1, sizeof(ResourceType), SortResourceTypes);
+	TotalSize = sizeof(ResourceFile) + (TypeList->NumTypes+1)*sizeof(ResourceGroup) + TotalCount*sizeof(Resource);
+	Rp = AllocSomeMem(TotalSize);
+	memset(Rp, 0, TotalSize);
+	Rp->NumGroups = TypeList->NumTypes+1;
+	Res = (void*)((Byte*)Rp+sizeof(ResourceFile) + Rp->NumGroups*sizeof(ResourceGroup));
+	Type = TypeList->Types;
+	Group = Rp->Groups;
+	for (i = 0; i < Rp->NumGroups; i++, Type++, Group++) {
+		Group->Type = Type->Type;
+		Group->Count = Type->Count+1;
+		Group->Refs = Res;
+		Ref = (void*)(Map + MapHead->TypeListOffset + Type->RefListOffset);
+		for (j = 0; j < Type->Count + 1; j++, Ref++, Res++) {
+			if (fseek(File, BaseOffset + Header.DataOffset + Ref->Handle, SEEK_SET)
+				|| fread(&RefSize, 1, sizeof(LongWord), File) != sizeof(LongWord)) {
+				ReleaseResources(Rp);
+				Rp = NULL;
+				goto Done;
+			}
+			Res->ID = Ref->ID;
+			Res->Offset = BaseOffset + Header.DataOffset + Ref->Handle + 4;
+			Res->Size = SwapLongBE(RefSize);
+		}
+	}
+	Rp->File = File;
+Done:
+	if (Map)
+		FreeSomeMem(Map);
 	return Rp;
+}
+
+void ReleaseResources(ResourceFile *Rp)
+{
+	int i, j;
+
+	if (!Rp)
+		return;
+
+	for (i = 0; i < Rp->NumGroups; i++) {
+		if (Rp->Groups[i].Refs) {
+			for (j = 0; j < Rp->Groups[i].Count; j++) {
+				if (Rp->Groups[i].Refs[j].Data)
+					FreeSomeMem(Rp->Groups[i].Refs[j].Data);
+			}
+		}
+	}
+
+	if (Rp->File)
+		fclose(Rp->File);
+	FreeSomeMem(Rp);
 }
 
 #pragma pack(push, r1, 1)
@@ -107,18 +305,12 @@ typedef struct {
 } MacBinaryHeader;
 #pragma pack(pop, r1)
 
-static RFILE *LoadMacBinary(const char *FileName)
+static ResourceFile *LoadMacBinary(FILE *File)
 {
 	MacBinaryHeader Header;
-	FILE *File = NULL;
-	RFILE *Rp = NULL;
+	ResourceFile *Rp = NULL;
 	LongWord ResourceForkOffset;
-	LongWord ResourceForkLen;
-	Byte *Buf = NULL;
 
-	File = fopen(FileName, "rb");
-	if (!File)
-		return NULL;
 	if (fread(&Header, 1, sizeof Header, File) != sizeof Header)
 		goto Done;
 
@@ -133,22 +325,8 @@ static RFILE *LoadMacBinary(const char *FileName)
 		goto Done;
 
 	ResourceForkOffset = sizeof Header + ((SwapUShortBE(Header.SecondaryHeaderLen) + 127) & ~127) + ((SwapLongBE(Header.DataForkLen) + 127) & ~127);
-	ResourceForkLen = SwapLongBE(Header.ResourceForkLen);
-	Buf = malloc(ResourceForkLen);
-	if (!Buf) BailOut("Out of memory");
-
-	if (fseek(File, ResourceForkOffset, SEEK_SET))
-		goto Done;
-	if (fread(Buf, 1,  ResourceForkLen, File) != ResourceForkLen)
-		goto Done;
-	Rp = res_open_mem(Buf, ResourceForkLen, 0);
-	if (Rp)
-		Buf = NULL;
+	Rp = LoadResourceFork(File, ResourceForkOffset);
 Done:
-	if (Buf)
-		free(Buf);
-	if (File)
-		fclose(File);
 	return Rp;
 }
 
@@ -169,18 +347,13 @@ typedef struct {
 } AppleSingleHeader;
 #pragma pack(pop, r1)
 
-static RFILE *LoadAppleSingle(const char *FileName)
+static ResourceFile *LoadAppleSingle(FILE *File)
 {
 	AppleSingleHeader Header;
-	FILE *File = NULL;
-	RFILE *Rp = NULL;
+	ResourceFile *Rp = NULL;
 	int i;
 	AppleSingleEntry *Entries;
-	Byte *Buf = NULL;
 
-	File = fopen(FileName, "rb");
-	if (!File)
-		return NULL;
 	if (fread(&Header, 1, sizeof Header, File) != sizeof Header)
 		goto Done;
 
@@ -194,43 +367,14 @@ static RFILE *LoadAppleSingle(const char *FileName)
 	for (i = 0; i < Header.NumEntries; i++) {
 		if (SwapLongBE(Entries[i].ID) != 2)
 			continue;
-		Entries[i].Length = SwapLongBE(Entries[i].Length);
-		Buf = malloc(Entries[i].Length);
-		if (!Buf) BailOut("Out of memory");
-		if (fseek(File, SwapLongBE(Entries[i].Offset), SEEK_SET))
-			goto Done;
-		if (fread(Buf, 1, Entries[i].Length, File) != Entries[i].Length)
-			goto Done;
-		Rp = res_open_mem(Buf, Entries[i].Length, 0);
-		if (Rp)
-			Buf = NULL;
+		Rp = LoadResourceFork(File, SwapLongBE(Entries[i].Offset));
 		break;
 	}
 
 Done:
 	if (Entries)
 		FreeSomeMem(Entries);
-	if (Buf)
-		free(Buf);
-	if (File)
-		fclose(File);
 	return Rp;
-}
-
-static void ReleaseResources(RFILE **Rp, Resource **Cache)
-{
-	if (*Rp) {
-		uint32_t Count = res_count((*Rp), BrgrType);
-		res_close((*Rp));
-		*Rp = NULL;
-		if (*Cache) {
-			for (int i = 0; i < Count; i++)
-				if ((*Cache)[i].data)
-					SDL_free((*Cache)[i].data);
-			SDL_free(*Cache);
-			*Cache = NULL;
-		}
-	}
 }
 
 void InitResources(void)
@@ -242,16 +386,14 @@ void InitResources(void)
 		BasePath = PrefPath();
 		char *TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1);
 		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
-		MainResources = LoadResources(TmpPath, &ResourceCache);
-		if (!MainResources && errno != ENOENT)
-			BailOut("%s: %s", TmpPath, strerror(errno));
+		MainResources = LoadResources(TmpPath);
 		FreeSomeMem(TmpPath);
 	}
 	if (!MainResources) {
 		BasePath = SDL_GetBasePath();
 		char *TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1);
 		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
-		MainResources = LoadResources(TmpPath, &ResourceCache);
+		MainResources = LoadResources(TmpPath);
 		FreeSomeMem(TmpPath);
 	}
 	if (!MainResources)
@@ -266,8 +408,8 @@ void InitResources(void)
 void KillResources(void)
 {
 	ReleaseSounds();
-	ReleaseResources(&MainResources, &ResourceCache);
-	ReleaseResources(&LevelResources, &LevelResourceCache);
+	ReleaseResources(MainResources);
+	ReleaseResources(LevelResources);
 }
 
 Boolean MountMapFile(const char *FileName)
@@ -288,12 +430,13 @@ Boolean MountMapFile(const char *FileName)
 		SongListPtr = NULL;
 		ReleaseAResource(rSongList);
 	}
-	ReleaseResources(&LevelResources, &LevelResourceCache);
+	ReleaseResources(LevelResources);
+	LevelResources = NULL;
 
 	if (!FileName)
 		FileName = DefaultLevelsPath;
 
-	LevelResources = LoadResources(FileName, &LevelResourceCache);
+	LevelResources = LoadResources(FileName);
 	if (LevelResources == NULL)
 		BailOut("MountMapFile: %s: %s", FileName, strerror(errno));
 	return LevelResources != NULL;
@@ -318,57 +461,112 @@ void EnumerateLevels(SDL_EnumerateDirectoryCallback callback, void *userdata)
 	}
 }
 
-static void *ReadResource(Word RezNum, LongWord Type, RFILE *Rp, LongWord *Len)
+static int SearchResourceGroups(const void *a, const void *b)
 {
-	ResAttr Attr;
+	LongWord ua, ub;
+
+	ua = (size_t)a;
+	ub = ((const ResourceGroup *)b)->Type;
+	return ua == ub ? 0 : (ua < ub ? -1 : 1);
+}
+
+static int SearchResources(const void *a, const void *b)
+{
+	int ua, ub;
+
+	ua = (size_t)a;
+	ub = ((const Resource *)b)->ID;
+	return ua - ub;
+}
+
+static ResourceGroup *FindResourceGroup(LongWord Type, ResourceFile *Rp)
+{
+	return SDL_bsearch((void*)(size_t)Type, Rp->Groups, Rp->NumGroups, sizeof(ResourceGroup), SearchResourceGroups);
+}
+
+static Resource *FindResource(Word RezNum, LongWord Type, ResourceFile *Rp)
+{
+	ResourceGroup *Group;
+
+	Group = FindResourceGroup(Type, Rp);
+	if (!Group)
+		return NULL;
+	return SDL_bsearch((void*)(size_t)RezNum, Group->Refs, Group->Count, sizeof(Resource), SearchResources);
+}
+
+static void *ReadResource(Word RezNum, LongWord Type, ResourceFile *Rp, LongWord *Len)
+{
+	Resource *Res;
 	void *Data;
 
-	if (res_attr(Rp, Type, RezNum, &Attr) == NULL)
+	Res = FindResource(RezNum, Type, Rp);
+	if (!Res)
 		return NULL;
-	Data = SDL_malloc(Attr.size);
+	Data = ReadAtOffset(Rp->File, Res->Offset, Res->Size);
 	if (!Data)
 		return NULL;
-	if (!res_read_ind(Rp, Type, Attr.index, Data, 0, Attr.size, NULL, NULL)) {
-		SDL_free(Data);
-		return NULL;
-	}
 	if (Len)
-		*Len = Attr.size;
+		*Len = Res->Size;
 	return Data;
 }
 
-static Resource *GetResource2(Word RezNum, RFILE *Rp, Resource *Cache)
+static Boolean ReadResourceTo(Resource *Res, FILE *File, void *Buf, LongWord Len)
 {
-	ResAttr Attr;
 	void *Data;
 
-	if (res_attr(Rp, BrgrType, RezNum, &Attr) == NULL)
-		return NULL;
-	if (Cache[Attr.index].data) {
-		Cache[Attr.index].refcount++;
-		return &Cache[Attr.index];
+	if (Res->Size != Len)
+		return FALSE;
+	if (Res->Data) {
+		memcpy(Buf, Res->Data, Len);
+		return TRUE;
 	}
-	Data = SDL_malloc(Attr.size);
+	if (fseek(File, Res->Offset, SEEK_SET))
+		return FALSE;
+	if (fread(Buf, 1, Len, File) != Len)
+		return FALSE;
+	return TRUE;
+}
+
+static Resource *CacheResource(Word RezNum, LongWord Type, ResourceFile *Rp)
+{
+	Resource *Res;
+	void *Data;
+
+	Res = FindResource(RezNum, Type, Rp);
+	if (!Res)
+		return NULL;
+	if (Res->Data) {
+		Res->RefCount++;
+		return Res;
+	}
+	Data = ReadAtOffset(Rp->File, Res->Offset, Res->Size);
 	if (!Data)
 		return NULL;
-	if (!res_read_ind(Rp, BrgrType, Attr.index, Data, 0, Attr.size, NULL, NULL)) {
-		SDL_free(Data);
-		return NULL;
+	Res->RefCount++;
+	Res->Data = Data;
+	return Res;
+}
+
+static Resource *GetResource2(Word RezNum, ResourceFile *Rp)
+{
+	Resource *Res;
+	if (LevelResources) {
+		Res = CacheResource(RezNum, BrgrType, LevelResources);
+		if (Res)
+			return Res;
 	}
-	Cache[Attr.index].data = Data;
-	Cache[Attr.index].refcount = 1;
-	return &Cache[Attr.index];
+	return CacheResource(RezNum, BrgrType, MainResources);
 }
 
 static Resource *GetResource(Word RezNum)
 {
 	Resource *Res;
 	if (LevelResources) {
-		Res = GetResource2(RezNum, LevelResources, LevelResourceCache);
+		Res = CacheResource(RezNum, BrgrType, LevelResources);
 		if (Res)
 			return Res;
 	}
-	return GetResource2(RezNum, MainResources, ResourceCache);
+	return CacheResource(RezNum, BrgrType, MainResources);
 }
 
 /**********************************
@@ -383,19 +581,20 @@ void *LoadAResource(Word RezNum)
 
 	Res = GetResource(RezNum);
 	if (Res)
-		return Res->data;
+		return Res->Data;
 	return NULL;
 }
 
 LongWord ResourceLength(Word RezNum)
 {
-	ResAttr attr;
-	if (LevelResources) {
-		if (res_attr(LevelResources, BrgrType, RezNum, &attr))
-			return attr.size;
-	}
-	if (res_attr(MainResources, BrgrType, RezNum, &attr))
-		return attr.size;
+	Resource *Res = NULL;
+
+	if (LevelResources)
+		Res = FindResource(RezNum, BrgrType, LevelResources);
+	if (!Res)
+		Res = FindResource(RezNum, BrgrType, MainResources);
+	if (Res)
+		return Res->Size;
 	return 0;
 }
 
@@ -405,16 +604,18 @@ LongWord ResourceLength(Word RezNum)
 
 **********************************/
 
-static Boolean UnrefResource(Word RezNum, RFILE *Rp, Resource *Cache)
+static Boolean UnrefResource(Word RezNum, ResourceFile *Rp)
 {
-	ResAttr attr;
-	if (!res_attr(Rp, BrgrType, RezNum, &attr))
+	Resource *Res;
+
+	Res = FindResource(RezNum, BrgrType, Rp);
+	if (!Res)
 		return FALSE;
-	if (Cache[attr.index].data) {
-		Cache[attr.index].refcount--;
-		if (Cache[attr.index].refcount == 0) {
-			SDL_free(Cache[attr.index].data);
-			Cache[attr.index].data = NULL;
+	if (Res->Data) {
+		Res->RefCount--;
+		if (Res->RefCount == 0) {
+			FreeSomeMem(Res->Data);
+			Res->Data = NULL;
 		}
 	}
 	return TRUE;
@@ -422,20 +623,22 @@ static Boolean UnrefResource(Word RezNum, RFILE *Rp, Resource *Cache)
 
 void ReleaseAResource(Word RezNum)
 {
-	if (LevelResources && UnrefResource(RezNum, LevelResources, LevelResourceCache))
+	if (LevelResources && UnrefResource(RezNum, LevelResources))
 		return;
-	UnrefResource(RezNum, MainResources, ResourceCache);
+	UnrefResource(RezNum, MainResources);
 }
 
-static Boolean DestroyResource(Word RezNum, RFILE *Rp, Resource *Cache)
+static Boolean DestroyResource(Word RezNum, ResourceFile *Rp)
 {
-	ResAttr attr;
-	if (!res_attr(Rp, BrgrType, RezNum, &attr))
+	Resource *Res;
+
+	Res = FindResource(RezNum, BrgrType, Rp);
+	if (!Res)
 		return FALSE;
-	if (Cache[attr.index].data) {
-		SDL_free(Cache[attr.index].data);
-		Cache[attr.index].data = NULL;
-		Cache[attr.index].refcount=0;
+	if (Res->Data) {
+		FreeSomeMem(Res->Data);
+		Res->Data = NULL;
+		Res->RefCount = 0;
 	}
 	return TRUE;
 }
@@ -444,8 +647,8 @@ static Boolean DestroyResource(Word RezNum, RFILE *Rp, Resource *Cache)
 void KillAResource(Word RezNum)
 {
 	if (LevelResources)
-		DestroyResource(RezNum, LevelResources, LevelResourceCache);
-	DestroyResource(RezNum, MainResources, ResourceCache);
+		DestroyResource(RezNum, LevelResources);
+	DestroyResource(RezNum, MainResources);
 }
 
 
@@ -609,30 +812,30 @@ static Byte *DecodeCsnd(const Byte *Buf, LongWord Len, LongWord *Size)
 	return Data;
 }
 
-static Boolean LoadSound(RFILE *Rp, Sound *Snd, Word ID)
+static Boolean LoadSound(ResourceFile *Rp, Sound *Snd, Word ID)
 {
-	ResAttr Attr;
+	Resource *Res;
 	uint8_t *Buf, *Decode;
 	LongWord Type;
 	LongWord Size;
 
 	Type = CsndType;
-	if (!res_attr(Rp, Type, ID, &Attr)) {
+	Res = FindResource(ID, Type, Rp);
+	if (!Res) {
 		Type = SndType;
-		if (!res_attr(Rp, Type, ID, &Attr))
+		Res = FindResource(ID, Type, Rp);
+		if (!Res)
 			return 0;
 	}
-	Buf = AllocSomeMem(Attr.size);
-	if (!res_read_ind(Rp, Type, Attr.index, Buf, 0, Attr.size, NULL, NULL))
-		goto Fail;
+	Buf = ReadAtOffset(Rp->File, Res->Offset, Res->Size);
 	if (Type == CsndType) {
-		Decode = DecodeCsnd(Buf, Attr.size, &Size);
+		Decode = DecodeCsnd(Buf, Res->Size, &Size);
 		if (!Decode)
 			goto Fail;
 		SDL_free(Buf);
 		Buf = Decode;
 	} else {
-		Size = Attr.size;
+		Size = Res->Size;
 	}
 	Snd->ID = ID;
 	Snd->basenote = Buf[41] ? Buf[41] : 0x3C;
@@ -692,7 +895,7 @@ static int SearchSounds(const void *a, const void *b)
 Sound *LoadCachedSound(Word RezNum)
 {
 	Sound *Snd;
-	Snd = bsearch((void*)(size_t)RezNum, SoundCache, NumSounds, sizeof(Sound), SearchSounds);
+	Snd = SDL_bsearch((void*)(size_t)RezNum, SoundCache, NumSounds, sizeof(Sound), SearchSounds);
 	if (!Snd || !Snd->data)
 		return NULL;
 	return Snd;
@@ -700,20 +903,21 @@ Sound *LoadCachedSound(Word RezNum)
 
 Byte *LoadSong(Word RezNum, LongWord *Len)
 {
-	Byte *Res;
-	if (LevelResources) {
-		Res = ReadResource(RezNum, MidiType, LevelResources, Len);
-		if (Res)
-			return Res;
-	}
-	return ReadResource(RezNum, MidiType, MainResources, Len);
+	Byte *Data = NULL;
+	if (LevelResources)
+		Data = ReadResource(RezNum, MidiType, LevelResources, Len);
+	if (!Data)
+		Data = ReadResource(RezNum, MidiType, MainResources, Len);
+	return Data;
 }
 
 void MacLoadSoundFont(void)
 {
 	size_t i, j;
+	ResourceFile *Rp = NULL;
+	ResourceGroup *Group = NULL;
+	Resource *Res;
 	Byte Buf[22];
-	ResAttr Attr;
 	int NSounds;
 	Sound *Sounds;
 	Word SoundID;
@@ -725,12 +929,19 @@ void MacLoadSoundFont(void)
 	Word Flags;
 	Byte BaseNote;
 
-	i = res_count(MainResources, InstType);
-	if (!i)
+	if (LevelResources) {
+		Rp = LevelResources;
+		Group = FindResourceGroup(InstType, Rp);
+	}
+	if (!Rp) {
+		Rp = MainResources;
+		Group = FindResourceGroup(InstType, Rp);
+	}
+	if (!Group || !Group->Count)
 		return;
 	MusicSynth = TSF_MALLOC(sizeof(tsf));
 	memset(MusicSynth, 0, sizeof(tsf));
-	MusicSynth->presetNum = i;
+	MusicSynth->presetNum = Group->Count;
 	MusicSynth->presets = TSF_MALLOC(MusicSynth->presetNum*sizeof(struct tsf_preset));
 	memset(MusicSynth->presets, 0, MusicSynth->presetNum*sizeof(struct tsf_preset));
 	for (i = 0; i < MusicSynth->presetNum; i++) {
@@ -746,13 +957,11 @@ void MacLoadSoundFont(void)
 	NSounds = 0;
 	Sounds = AllocSomeMem(MusicSynth->presetNum*sizeof(Sound));
 	FloatBufferSize = 0;
-	if (!Sounds) BailOut("Out of memory");
 	for (i = 0; i < MusicSynth->presetNum; i++) {
-		if (!res_list(MainResources, InstType, &Attr, i, 1, NULL, NULL))
+		Res = &Group->Refs[i];
+		if (Res->Size < sizeof Buf)
 			continue;
-		if (Attr.size < sizeof Buf)
-			continue;
-		if (!res_read_ind(MainResources, InstType, i, Buf, 0, sizeof Buf, NULL, NULL))
+		if (!ReadResourceTo(Res, Rp->File, Buf, sizeof Buf))
 			continue;
 		SoundID = SwapUShortBE(*(u_uint16_t*)&Buf[0]);
 		for (j = 0; j < NSounds; j++) {
@@ -781,7 +990,7 @@ void MacLoadSoundFont(void)
 		}
 		Flags = (Buf[5]<<8)|Buf[6];
 		BaseNote = Buf[3];
-		MusicSynth->presets[i].preset = Attr.ID;
+		MusicSynth->presets[i].preset = Res->ID;
 		Region = &MusicSynth->presets[i].regions[0];
 
 		Region->sample_rate = (Flags & 0x800) ? Sounds[j].samplerate : 22254;
@@ -797,7 +1006,7 @@ void MacLoadSoundFont(void)
 		Region->ampenv.decay = 8000.f;
 		Region->ampenv.hold = 5000.f;
 		if (Flags & 0x04)
-			Region->group = Attr.ID;
+			Region->group = Res->ID;
 		if (Flags & 0x40)
 			Region->pitch_keytrack = 0;
 	}
@@ -815,9 +1024,9 @@ static void FreePixels(void *userdata, void *value)
 	SDL_free(value);
 }
 
-SDL_Surface *LoadPict(RFILE *Rp, Word PicNum)
+SDL_Surface *LoadPict(ResourceFile *Rp, Word PicNum)
 {
-	ResAttr Attr;
+	Resource *Res;
 	Byte *Data;
 	Byte *Pixels = NULL;
 	Word Stride;
@@ -832,14 +1041,13 @@ SDL_Surface *LoadPict(RFILE *Rp, Word PicNum)
 	SDL_Color Colors[256];
 
 	/* Extremely limited support for RLE encoded quickdraw PICT files */
-	if (!res_attr(Rp, PictType, PicNum, &Attr))
+	Res = FindResource(PicNum, PictType, Rp);
+	if (!Res)
 		return NULL;
-	if (Attr.size < 0x87E)
+	if (Res->Size < 0x87E)
 		return NULL;
-	Data = SDL_malloc(Attr.size);
+	Data = ReadAtOffset(Rp->File, Res->Offset, Res->Size);
 	if (!Data) return NULL;
-	if (!res_read_ind(Rp, PictType, Attr.index, Data, 0, Attr.size, NULL, NULL))
-		goto Done;
 	if (SwapUShortBE(*(const u_uint16_t*)&Data[0x34]) != 0x0098) /* check for RLE opcode */
 		goto Done;
 
@@ -863,7 +1071,7 @@ SDL_Surface *LoadPict(RFILE *Rp, Word PicNum)
 		Pix = Pixels;
 		PixelsEnd = Pixels + Stride * H;
 		Packed = &Data[0x87E];
-		PackedEnd = Data + Attr.size;
+		PackedEnd = Data + Res->Size;
 		for (y = 0; y < H; y++) {
 			NextRow = Pix + Stride;
 			if (Stride > 200) {
