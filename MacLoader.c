@@ -1,5 +1,6 @@
 #include "WolfDef.h"
 #include "SDLWolf.h"
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
@@ -44,6 +45,8 @@ static Sound *SoundCache = NULL;
 tsf *MusicSynth;
 
 static void ReleaseSounds(void);
+static RFILE *LoadMacBinary(const char *FileName);
+static RFILE *LoadAppleSingle(const char *FileName);
 
 static RFILE *LoadResources(const char *FileName, Resource **CacheOut)
 {
@@ -52,8 +55,14 @@ static RFILE *LoadResources(const char *FileName, Resource **CacheOut)
 	Resource *Cache;
 
 	Rp = res_open(FileName, 0);
-	if (!Rp)
-		return NULL;
+	if (!Rp) {
+		Rp = LoadMacBinary(FileName);
+		if (!Rp) {
+			Rp = LoadAppleSingle(FileName);
+			if (!Rp)
+				return NULL;
+		}
+	}
 	Count = res_count(Rp, BrgrType);
 	Cache = SDL_calloc(Count, sizeof(Resource));
 	if (!Cache) {
@@ -61,6 +70,150 @@ static RFILE *LoadResources(const char *FileName, Resource **CacheOut)
 		return NULL;
 	}
 	*CacheOut = Cache;
+	return Rp;
+}
+
+#pragma pack(push, r1, 1)
+typedef struct {
+	Byte OldVersion;
+	Byte FileNameLen;
+	char FileName[63];
+	char FileType[4];
+	char FileCreator[4];
+	Byte FinderFlags;
+	Byte :8;
+	Word VertPos;
+	Word HorizPos;
+	Word FolderID;
+	Byte Protected;
+	Byte :8;
+	LongWord DataForkLen;
+	LongWord ResourceForkLen;
+	LongWord CreationDate;
+	LongWord ModifiedDate;
+	Word CommentLen;
+	Byte FinderFlags2;
+	char Signature[4];
+	Byte FileNameScript;
+	Byte FinderFlags3;
+	LongWord :32;
+	LongWord :32;
+	LongWord UnpackLen;
+	Word SecondaryHeaderLen;
+	Byte Version;
+	Byte MinVersion;
+	Word CRC;
+	Word :16;
+} MacBinaryHeader;
+#pragma pack(pop, r1)
+
+static RFILE *LoadMacBinary(const char *FileName)
+{
+	MacBinaryHeader Header;
+	FILE *File = NULL;
+	RFILE *Rp = NULL;
+	LongWord ResourceForkOffset;
+	LongWord ResourceForkLen;
+	Byte *Buf = NULL;
+
+	File = fopen(FileName, "rb");
+	if (!File)
+		return NULL;
+	if (fread(&Header, 1, sizeof Header, File) != sizeof Header)
+		goto Done;
+
+	if (Header.OldVersion != 0 || Header.FileNameLen == 0 || Header.FileNameLen > 63)
+		goto Done;
+	if (strncmp(Header.FileType, "APPL", 4)
+		&& strncmp(Header.FileType, "MAPS", 4)
+		&& strncmp(Header.FileType, "????", 4)
+		&& strncmp(Header.FileCreator, "WOLF", 4)
+		&& strncmp(Header.FileCreator, "????", 4)
+		&& strncmp(Header.Signature, "mBIN", 4))
+		goto Done;
+
+	ResourceForkOffset = sizeof Header + ((SwapUShortBE(Header.SecondaryHeaderLen) + 127) & ~127) + ((SwapLongBE(Header.DataForkLen) + 127) & ~127);
+	ResourceForkLen = SwapLongBE(Header.ResourceForkLen);
+	Buf = malloc(ResourceForkLen);
+	if (!Buf) BailOut("Out of memory");
+
+	if (fseek(File, ResourceForkOffset, SEEK_SET))
+		goto Done;
+	if (fread(Buf, 1,  ResourceForkLen, File) != ResourceForkLen)
+		goto Done;
+	Rp = res_open_mem(Buf, ResourceForkLen, 0);
+	if (Rp)
+		Buf = NULL;
+Done:
+	if (Buf)
+		free(Buf);
+	if (File)
+		fclose(File);
+	return Rp;
+}
+
+#pragma pack(push, r1, 1)
+typedef struct {
+	LongWord ID;
+	LongWord Offset;
+	LongWord Length;
+} AppleSingleEntry;
+typedef struct {
+	char Signature[4];
+	LongWord Version;
+	LongWord :32;
+	LongWord :32;
+	LongWord :32;
+	LongWord :32;
+	Word NumEntries;
+} AppleSingleHeader;
+#pragma pack(pop, r1)
+
+static RFILE *LoadAppleSingle(const char *FileName)
+{
+	AppleSingleHeader Header;
+	FILE *File = NULL;
+	RFILE *Rp = NULL;
+	int i;
+	AppleSingleEntry *Entries;
+	Byte *Buf = NULL;
+
+	File = fopen(FileName, "rb");
+	if (!File)
+		return NULL;
+	if (fread(&Header, 1, sizeof Header, File) != sizeof Header)
+		goto Done;
+
+	if (strncmp(Header.Signature, "\x00\x05\x16\x00", 4))
+		goto Done;
+
+	Header.NumEntries = SwapUShortBE(Header.NumEntries);
+	Entries = AllocSomeMem(Header.NumEntries*sizeof(AppleSingleEntry));
+	if (fread(Entries, sizeof(AppleSingleEntry), Header.NumEntries, File) != Header.NumEntries)
+		goto Done;
+	for (i = 0; i < Header.NumEntries; i++) {
+		if (SwapLongBE(Entries[i].ID) != 2)
+			continue;
+		Entries[i].Length = SwapLongBE(Entries[i].Length);
+		Buf = malloc(Entries[i].Length);
+		if (!Buf) BailOut("Out of memory");
+		if (fseek(File, SwapLongBE(Entries[i].Offset), SEEK_SET))
+			goto Done;
+		if (fread(Buf, 1, Entries[i].Length, File) != Entries[i].Length)
+			goto Done;
+		Rp = res_open_mem(Buf, Entries[i].Length, 0);
+		if (Rp)
+			Buf = NULL;
+		break;
+	}
+
+Done:
+	if (Entries)
+		FreeSomeMem(Entries);
+	if (Buf)
+		free(Buf);
+	if (File)
+		fclose(File);
 	return Rp;
 }
 

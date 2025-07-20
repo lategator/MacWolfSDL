@@ -12,19 +12,19 @@ cmake -B build . && cmake --build build
 
 ## Running
 
-The resource fork from the Mac binary needs to be extracted with the name `Wolf3D.rsrc` and placed either in the same folder as the macwolfsdl executable, or in a platform-specific config folder:
+The Mac binary or its resource fork need to be taken from the original game install, named `Wolf3D.rsrc` and placed either in the same folder as the macwolfsdl executable, or in a platform-specific config folder:
 
 - Windows: `C:\Users\<USER>\AppData\Roaming\macwolfsdl\`
 - macOS: `/Users/<USER>/Library/Application Support/macwolfsdl/`
 - Linux: `/home/<USER>/.local/share/macwolfsdl/`
 
-Where `<USER>` is your local username.
+Where `<USER>` is your local username. The file can be any of these formats: MacBinary II, AppleSingle, AppleDouble, raw resource fork.
 
-Resource forks from scenarios also need to be extracted and placed within a `/Levels/` subfolder of the config folder. A fully extracted Third Encounter will look like this:
+Scenario files accept the same formats and need to be placed within a `/Levels/` subfolder of the config folder. A fully set-up Third Encounter will look like this:
 
 ```bash
 macwolfsdl/Wolf3D.rsrc
-macwolfsdl/Levels/ Second_Encounter (30 Levels).rsrc
+macwolfsdl/Levels/ Second Encounter (30 Levels).rsrc
 macwolfsdl/Levels/1 Escape From Wolfenstein.rsrc
 macwolfsdl/Levels/2 Operation Eisenfaust.rsrc
 macwolfsdl/Levels/3 Die, Fuhrer, Die!.rsrc
