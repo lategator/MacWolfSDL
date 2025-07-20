@@ -191,18 +191,23 @@ void GoodBye(void)
 	Cleanup(0);
 }
 
+static void BailOut2(const char *Msg)
+{
+	fprintf(stderr, "%s\n", Msg);
+	UngrabMouse();
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal Error", Msg, SdlWindow);
+	Cleanup(1);
+}
+
 void BailOut(const char *Fmt, ...)
 {
-	char Buf[1024];
+	char Buf[4096];
 	va_list Args;
 
 	va_start(Args, Fmt);
 	vsnprintf(Buf, sizeof Buf, Fmt, Args);
-	fprintf(stderr, "%s\n", Buf);
-	UngrabMouse();
-	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal Error", Buf, SdlWindow);
 	va_end(Args);
-	Cleanup(1);
+	BailOut2(Buf);
 }
 
 static void ClearScreenTexture(void)
@@ -1283,9 +1288,15 @@ static int PrefsIniHandler(void* User, const char* Section, const char* Name, co
 		}
 	} else if (SDL_strcasecmp(Section, "audio") == 0) {
 		if (SDL_strcasecmp(Name, "sfx") == 0) {
-			SystemState |= StrToBool(Value) ? SfxActive : 0;
+			if (StrToBool(Value))
+				SystemState |= SfxActive;
+			else
+				SystemState &= ~SfxActive;
 		} else if (SDL_strcasecmp(Name, "music") == 0) {
-			SystemState |= StrToBool(Value) ? MusicActive : 0;
+			if (StrToBool(Value))
+				SystemState |= MusicActive;
+			else
+				SystemState &= ~MusicActive;
 		}
 	} else if (SDL_strcasecmp(Section, "video") == 0) {
 		if (SDL_strcasecmp(Name, "fullscreen") == 0) {
@@ -1317,7 +1328,7 @@ void LoadPrefs(void)
 	char *Buf;
 	Uint64 BufLen;
 
-	SystemState = 3;			/* Assume sound & music enabled */
+	SystemState = SfxActive|MusicActive;/* Assume sound & music enabled */
 	MouseEnabled = FALSE;		/* Mouse control shut off */
 	SlowDown = TRUE;			/* Enable speed governor */
 	GameViewSize = 3;			/* 640 mode screen */

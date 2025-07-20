@@ -24,7 +24,7 @@ void BlastScreen(void);
 extern unsigned char MacFont[];
 unsigned char *VideoPointer;	/* Pointer to video memory */
 Word VideoWidth;				/* Width to each video scan line */
-Word SystemState=3;				/* Sound on/off flags */
+Word SystemState=SfxActive|MusicActive;				/* Sound on/off flags */
 Boolean FullScreen=0;			/* Fullscreen toggle */
 Byte ScreenScaleMode=0;			/* Scale/stretch select */
 Boolean ScreenFilter=0;			/* Scale/stretch select */
