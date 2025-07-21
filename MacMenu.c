@@ -368,7 +368,7 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 
 	Path = AllocSomeMem(strlen(Dir) + strlen(Name) + 1);
 	stpcpy(stpcpy(Path, Dir), Name);
-	Rp = LoadResourceForkFile(Path);
+	Rp = LoadResources(Path);
 	if (!Rp) {
 		SDL_free(NameBuf);
 		SDL_free(Path);

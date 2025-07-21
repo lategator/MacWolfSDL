@@ -42,7 +42,7 @@ static ResourceFile *LoadMacBinary(FILE *File);
 static ResourceFile *LoadAppleSingle(FILE *File);
 static void ReleaseSounds(void);
 
-static ResourceFile *LoadResources(const char *FileName)
+ResourceFile *LoadResources(const char *FileName)
 {
 	FILE *File;
 	ResourceFile *Rp;
@@ -133,16 +133,6 @@ static void *ReadAtOffset(FILE *File, LongWord Offset, LongWord Size)
 		return NULL;
 	}
 	return Buf;
-}
-
-ResourceFile *LoadResourceForkFile(const char *FileName)
-{
-	FILE *File;
-
-	File = fopen(FileName, "rb");
-	if (!File)
-		return NULL;
-	return LoadResourceFork(File, 0);
 }
 
 static int SortResourceTypes(const void *a, const void *b)

@@ -14,7 +14,7 @@ extern ResourceFile *MainResources;
 extern SDL_Keycode KeyBinds[12];
 extern char *ScenarioPath;
 
-extern ResourceFile *LoadResourceForkFile(const char *FileName);
+extern ResourceFile* LoadResources(const char* FileName);
 extern void ReleaseResources(ResourceFile *Rp);
 extern const char *PrefPath(void);
 extern SDL_Storage *PrefStorage(void);
