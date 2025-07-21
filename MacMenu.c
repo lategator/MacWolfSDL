@@ -340,6 +340,16 @@ static widgetclass_t MenuSeparatorClass = { MenuSeparatorRender, NULL };
 static widgetclass_t VScrollBarClass = { VScrollBarRender, VScrollBarClick };
 static widgetclass_t EmptyClass = { NULL, NULL };
 
+static const char LatinSupp[64] =
+"AAAAAAAC"
+"EEEEIIII"
+"DNOOOOOx"
+"OUUUUYpB"
+"aaaaaaac"
+"eeeeiiii"
+"dnooooo/"
+"ouuuuypy";
+
 static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, const char *Name)
 {
 	char *NameBuf;
@@ -349,20 +359,23 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 	ResourceFile *Rp;
 	scenario_t *Scenario;
 	size_t NameLen;
-	char c;
+	Uint32 c;
 
-	NameLen = strlen(Name);
+	NameLen = SDL_strlen(Name);
 	NameBuf = AllocSomeMem(NameLen+1);
-	for (s = NameBuf, t = Name; *t; s++, t++) {
-		c = *t;
-		if (isspace(c))
+	for (s = NameBuf, t = Name; *t; s++) {
+		c = SDL_StepUTF8(&t, &NameLen);
+		if (c < 128 && isspace(c))
 			*s = ' ';
-		else if (c < ' ')
+		else if (c >= 0xC0 && c < 0x100)
+			*s = LatinSupp[c - 0xC0];
+		else if (c < ' ' || c >= 0x80)
 			*s = '_';
 		else
 			*s = c;
 	}
 	*s = '\0';
+	NameLen = s - NameBuf;
 	if (NameLen >= 5 && !SDL_strcasecmp(".rsrc", &NameBuf[NameLen-5]))
 		NameBuf[NameLen-5] = '\0';
 

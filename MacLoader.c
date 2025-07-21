@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #define TSF_IMPLEMENTATION
 #define TSF_NO_STDIO
@@ -46,8 +49,19 @@ ResourceFile *LoadResources(const char *FileName)
 {
 	FILE *File;
 	ResourceFile *Rp;
+#ifdef _WIN32
+	wchar_t* WFileName;
+	int WLen;
 
+	WLen = MultiByteToWideChar(CP_UTF8, 0, FileName, -1, NULL, 0);
+	if (WLen <= 0) return NULL;
+	WFileName = AllocSomeMem(WLen * sizeof(wchar_t));
+	MultiByteToWideChar(CP_UTF8, 0, FileName, -1, WFileName, WLen);
+	File = _wfopen(WFileName, L"rb");
+	SDL_free(WFileName);
+#else
 	File = fopen(FileName, "rb");
+#endif
 	if (!File)
 		return NULL;
 	Rp = LoadMacBinary(File);
@@ -474,7 +488,7 @@ static ResourceGroup *FindResourceGroup(LongWord Type, ResourceFile *Rp)
 	return SDL_bsearch((void*)(size_t)Type, Rp->Groups, Rp->NumGroups, sizeof(ResourceGroup), SearchResourceGroups);
 }
 
-static Resource *FindResource(Word RezNum, LongWord Type, ResourceFile *Rp)
+static Resource *FindAResource(Word RezNum, LongWord Type, ResourceFile *Rp)
 {
 	ResourceGroup *Group;
 
@@ -489,7 +503,7 @@ static void *ReadResource(Word RezNum, LongWord Type, ResourceFile *Rp, LongWord
 	Resource *Res;
 	void *Data;
 
-	Res = FindResource(RezNum, Type, Rp);
+	Res = FindAResource(RezNum, Type, Rp);
 	if (!Res)
 		return NULL;
 	Data = ReadAtOffset(Rp->File, Res->Offset, Res->Size);
@@ -522,7 +536,7 @@ static Resource *CacheResource(Word RezNum, LongWord Type, ResourceFile *Rp)
 	Resource *Res;
 	void *Data;
 
-	Res = FindResource(RezNum, Type, Rp);
+	Res = FindAResource(RezNum, Type, Rp);
 	if (!Res)
 		return NULL;
 	if (Res->Data) {
@@ -580,9 +594,9 @@ LongWord ResourceLength(Word RezNum)
 	Resource *Res = NULL;
 
 	if (LevelResources)
-		Res = FindResource(RezNum, BrgrType, LevelResources);
+		Res = FindAResource(RezNum, BrgrType, LevelResources);
 	if (!Res)
-		Res = FindResource(RezNum, BrgrType, MainResources);
+		Res = FindAResource(RezNum, BrgrType, MainResources);
 	if (Res)
 		return Res->Size;
 	return 0;
@@ -598,7 +612,7 @@ static Boolean UnrefResource(Word RezNum, ResourceFile *Rp)
 {
 	Resource *Res;
 
-	Res = FindResource(RezNum, BrgrType, Rp);
+	Res = FindAResource(RezNum, BrgrType, Rp);
 	if (!Res)
 		return FALSE;
 	if (Res->Data) {
@@ -622,7 +636,7 @@ static Boolean DestroyResource(Word RezNum, ResourceFile *Rp)
 {
 	Resource *Res;
 
-	Res = FindResource(RezNum, BrgrType, Rp);
+	Res = FindAResource(RezNum, BrgrType, Rp);
 	if (!Res)
 		return FALSE;
 	if (Res->Data) {
@@ -810,10 +824,10 @@ static Boolean LoadSound(ResourceFile *Rp, Sound *Snd, Word ID)
 	LongWord Size;
 
 	Type = CsndType;
-	Res = FindResource(ID, Type, Rp);
+	Res = FindAResource(ID, Type, Rp);
 	if (!Res) {
 		Type = SndType;
-		Res = FindResource(ID, Type, Rp);
+		Res = FindAResource(ID, Type, Rp);
 		if (!Res)
 			return 0;
 	}
@@ -1031,7 +1045,7 @@ SDL_Surface *LoadPict(ResourceFile *Rp, Word PicNum)
 	SDL_Color Colors[256];
 
 	/* Extremely limited support for RLE encoded quickdraw PICT files */
-	Res = FindResource(PicNum, PictType, Rp);
+	Res = FindAResource(PicNum, PictType, Rp);
 	if (!Res)
 		return NULL;
 	if (Res->Size < 0x87E)
