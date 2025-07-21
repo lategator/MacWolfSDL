@@ -19,6 +19,12 @@ jobs:
     - uses: actions/upload-artifact@v4
       with: { name: macwolfsdl-win64, path: 'build/macwolfsdl-win64-${{ github.sha }}.zip' }
 
+  build-msvc:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release .; if ($?) { cmake --build build }
+
   build-macos:
     runs-on: macos-latest
     steps:
