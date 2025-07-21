@@ -444,7 +444,6 @@ exit_t ReadSystemJoystick(void)
 	while (SDL_PollEvent(&event)) {
 		if (ProcessGlobalEvent(&event))
 			continue;
-		SDL_ConvertEventToRenderCoordinates(SdlRenderer, &event);
 		if (event.type == SDL_EVENT_MOUSE_WHEEL) {
 			mousewheel += event.wheel.y;
 		} else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
