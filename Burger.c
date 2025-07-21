@@ -48,19 +48,6 @@ typedef struct {
 	uint8_t xa: 4, yo: 4;
 } glyph_t;
 
-#ifdef _MSC_VER
-char *stpcpy(char *restrict dst, const char *restrict src)
-{
-	size_t n;
-
-	n = strlen(src);
-	memcpy(dst, src, n);
-	dst[n] = '\0';
-	return &dst[n];
-}
-#endif
-
-
 /**********************************
 
 	Wait a single system tick
@@ -731,6 +718,19 @@ void *AllocSomeMem(LongWord Size)
 	void *Buf = SDL_malloc(Size);
 	if (!Buf) BailOut("Out of memory");
 	return Buf;
+}
+
+char *AllocFormatStr(const char *Fmt, ...)
+{
+	char *Str;
+	va_list Args;
+	int RetVal;
+
+	va_start(Args, Fmt);
+	RetVal = SDL_vasprintf(&Str, Fmt, Args);
+	va_end(Args);
+	if (RetVal < 0) BailOut("Out of memory");
+	return Str;
 }
 
 /**********************************

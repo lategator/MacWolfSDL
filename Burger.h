@@ -11,7 +11,6 @@
 #define __builtin_strlen strlen
 #define __builtin_bswap16 _byteswap_ushort
 #define __builtin_bswap32 _byteswap_ulong
-extern char *stpcpy(char *restrict dst, const char *restrict src);
 #endif
 
 typedef uint16_t Word;
@@ -90,6 +89,7 @@ Word WaitEvent(void);
 LongWord ReadTick(void);
 void *AllocSomeMem(LongWord Size);
 void FreeSomeMem(void *MemPtr);
+char *AllocFormatStr(const char *Fmt, ...) __attribute__((format(printf, 1, 2)));
 
 void SoundOff(void);
 void PlaySound(Word SndNum);

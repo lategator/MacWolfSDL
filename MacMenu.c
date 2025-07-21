@@ -379,8 +379,7 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 	if (NameLen >= 5 && !SDL_strcasecmp(".rsrc", &NameBuf[NameLen-5]))
 		NameBuf[NameLen-5] = '\0';
 
-	Path = AllocSomeMem(strlen(Dir) + strlen(Name) + 1);
-	stpcpy(stpcpy(Path, Dir), Name);
+	Path = AllocFormatStr("%s%s", Dir, Name);
 	Rp = LoadResources(Path);
 	if (!Rp) {
 		SDL_free(NameBuf);

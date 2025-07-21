@@ -23,7 +23,9 @@
 #define TSF_SQRTF SDL_sqrtf
 #include "tsf.h"
 
-static const char *MainResourceFile = "Wolf3D.rsrc";
+static const char *MainResourceFileNames[] = {
+"Wolfenstein 3D", "Wolfenstein 3D\u2122", "Wolfenstein3D", "Wolf3D"};
+static const char *ResourceFileExtensions[] = {"bin","macbin","rsrc"};
 static const char *LevelsFolder = "Levels/";
 static const char *DefaultLevelsPath = "Levels/ Second Encounter (30 Levels).rsrc";
 
@@ -45,10 +47,9 @@ static ResourceFile *LoadMacBinary(FILE *File);
 static ResourceFile *LoadAppleSingle(FILE *File);
 static void ReleaseSounds(void);
 
-ResourceFile *LoadResources(const char *FileName)
+static FILE *FOpenRead(const char *FileName)
 {
 	FILE *File;
-	ResourceFile *Rp;
 #ifdef _WIN32
 	wchar_t* WFileName;
 	int WLen;
@@ -62,8 +63,13 @@ ResourceFile *LoadResources(const char *FileName)
 #else
 	File = fopen(FileName, "rb");
 #endif
-	if (!File)
-		return NULL;
+	return File;
+}
+
+static ResourceFile *LoadResourceStream(FILE *File)
+{
+	ResourceFile *Rp;
+
 	Rp = LoadMacBinary(File);
 	if (!Rp) {
 		fseek(File, 0, SEEK_SET);
@@ -76,6 +82,16 @@ ResourceFile *LoadResources(const char *FileName)
 	if (!Rp)
 		fclose(File);
 	return Rp;
+}
+
+ResourceFile *LoadResources(const char *FileName)
+{
+	FILE *File;
+
+	File = FOpenRead(FileName);
+	if (!File)
+		return NULL;
+	return LoadResourceStream(File);
 }
 
 #pragma pack(push, r1, 1)
@@ -381,32 +397,72 @@ Done:
 	return Rp;
 }
 
+ResourceFile *TryResourcePath(const char *FileName, char **Found)
+{
+	FILE *File;
+	ResourceFile *Rp;
+
+	File = FOpenRead(FileName);
+	if (!File)
+		return NULL;
+	if (!*Found)
+		*Found = SDL_strdup(FileName);
+	return LoadResourceStream(File);
+}
+
 void InitResources(void)
 {
-	const char *BasePath;
+	FILE *File;
+
+	const char *FileName;
+	const char *Dirs[2];
+	char *Found = NULL;
+	char *TmpPath;
+	int i, j, k;
+
 	if (MainResources)
 		return;
-	{
-		BasePath = PrefPath();
-		char *TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1);
-		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
-		MainResources = LoadResources(TmpPath);
-		FreeSomeMem(TmpPath);
+	Dirs[0] = PrefPath();
+	Dirs[1] = SDL_GetBasePath();
+	for (i = 0; i < ARRAYLEN(Dirs); i++) {
+		for (j = 0; j < ARRAYLEN(MainResourceFileNames); j++) {
+			FileName = MainResourceFileNames[j];
+
+			TmpPath = AllocFormatStr("%s._%s", Dirs[i], FileName);
+			MainResources = TryResourcePath(TmpPath, &Found);
+			FreeSomeMem(TmpPath);
+			if (MainResources)
+				goto Done;
+			TmpPath = AllocFormatStr("%s%s", Dirs[i], FileName);
+			MainResources = TryResourcePath(TmpPath, &Found);
+			FreeSomeMem(TmpPath);
+			if (MainResources)
+				goto Done;
+			for (k = 0; k < ARRAYLEN(ResourceFileExtensions); k++) {
+				TmpPath = AllocFormatStr("%s%s.%s", Dirs[i], FileName, ResourceFileExtensions[k]);
+				MainResources = TryResourcePath(TmpPath, &Found);
+				FreeSomeMem(TmpPath);
+				if (MainResources)
+					goto Done;
+			}
+		}
 	}
+Done:
 	if (!MainResources) {
-		BasePath = SDL_GetBasePath();
-		char *TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(MainResourceFile) + 1);
-		stpcpy(stpcpy(TmpPath, BasePath), MainResourceFile);
-		MainResources = LoadResources(TmpPath);
-		FreeSomeMem(TmpPath);
+		if (Found)
+			BailOut("Resource file not readable:\n\n%s\n\n"
+					"File must be a valid MacBinary II, AppleSingle, AppleDouble, or raw resource fork.",
+					Found);
+		else
+			BailOut("Resource file '%s' not found!\n\n"
+					"This file contains the Wolfenstein 3D assets and is required to run the game.\n"
+					"It must be copied from an installed executable of Wolfenstein 3D Third Encounter for Macintosh Classic.\n"
+					"The file format can be any of: MacBinary II, AppleSingle, AppleDouble, or raw resource fork.\n\n"
+					"After extracting, it should be placed in the same folder as the executable, or in this folder:\n\n%s",
+					MainResourceFileNames[0], PrefPath());
 	}
-	if (!MainResources)
-		BailOut("Resource file not found or not readable: '%s'\n\n"
-				"This file contains the Wolfenstein 3D assets and is required to run the game.\n"
-				"It must be copied from an installed executable of Wolfenstein 3D Third Encounter for Macintosh Classic.\n"
-				"The file format can be any of: MacBinary II, AppleSingle, AppleDouble, or a raw resource fork.\n\n"
-				"After extracting, it should be placed in the same folder as the executable, or in this folder:\n\n%s",
-				MainResourceFile, PrefPath());
+	if (Found)
+		SDL_free(Found);
 }
 
 void KillResources(void)
@@ -448,21 +504,14 @@ Boolean MountMapFile(const char *FileName)
 
 void EnumerateLevels(SDL_EnumerateDirectoryCallback callback, void *userdata)
 {
-	const char *BasePath;
-	{
-		BasePath = PrefPath();
-		char* TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1);
-		stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
-		SDL_EnumerateDirectory(TmpPath, callback, userdata);
-		FreeSomeMem(TmpPath);
-	}
-	{
-		BasePath = SDL_GetBasePath();
-		char* TmpPath = AllocSomeMem(strlen(BasePath) + __builtin_strlen(LevelsFolder) + 1);
-		stpcpy(stpcpy(TmpPath, BasePath), LevelsFolder);
-		SDL_EnumerateDirectory(TmpPath, callback, userdata);
-		FreeSomeMem(TmpPath);
-	}
+	char *TmpPath;
+
+	TmpPath = AllocFormatStr("%s%s", PrefPath(), LevelsFolder);
+	SDL_EnumerateDirectory(TmpPath, callback, userdata);
+	FreeSomeMem(TmpPath);
+	TmpPath = AllocFormatStr("%s%s", SDL_GetBasePath(), LevelsFolder);
+	SDL_EnumerateDirectory(TmpPath, callback, userdata);
+	FreeSomeMem(TmpPath);
 }
 
 static int SearchResourceGroups(const void *a, const void *b)
