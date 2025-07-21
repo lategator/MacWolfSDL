@@ -498,7 +498,10 @@ Word ChooseScenario(void)
 	} else {
 		MenuPosY = 0;
 	}
-	MenuScrollY = MenuPosY >= ScenariosItemHeight ? MenuPosY - ScenariosItemHeight + 1 : MenuPosY;
+	if (ScenarioCount > ScenariosItemHeight && MenuPosY >= ScenariosItemHeight)
+		MenuScrollY = SDL_min(MenuPosY, ScenarioCount - ScenariosItemHeight);
+	else
+		MenuScrollY = 0;
 	ResizeGameWindow(369, 331);
 	ClearTheScreen(WHITE);
 	ClearFrameBuffer();
