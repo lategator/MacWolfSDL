@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
     - uses: actions/checkout@v4
     - run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release .; if ($?) { cmake --build build }
@@ -20,13 +20,16 @@ jobs:
       with: { name: macwolfsdl-win64, path: 'build/macwolfsdl-win64-${{ github.sha }}.zip' }
 
   build-msvc:
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
     - uses: actions/checkout@v4
-    - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release .; if ($?) { cmake --build build }
+    - run: cmake -B build -G "Visual Studio 17 2022" -A Win32 .; if ($?) { cmake --build build --config Release }
+    - run: cd ./build; Compress-Archive -Path ./Release/MacWolfSDL.exe,../LICENSES -DestinationPath ./macwolfsdl-win32-${{ github.sha }}.zip
+    - uses: actions/upload-artifact@v4
+      with: { name: macwolfsdl-win32, path: 'build/macwolfsdl-win32-${{ github.sha }}.zip' }
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
     - uses: actions/checkout@v4
     - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" . && cmake --build build
@@ -36,7 +39,7 @@ jobs:
       with: { name: macwolfsdl-macos, path: 'build/macwolfsdl-macos-${{ github.sha }}.dmg' }
 
   build-ubuntu:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     - run: |
