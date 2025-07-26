@@ -76,7 +76,7 @@ void InitTools(void)
 
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD))
 		BailOut("SDL_Init: %s", SDL_GetError());
-	SDL_SetAppMetadata("Wolfenstein 3D", "1.0", "wolf3dsnes");
+	SDL_SetAppMetadata("Wolfenstein 3D", "1.0", "MacWolfSDL");
 	Gamepads = SDL_GetGamepads(&NumGamepads);
 	if (Gamepads) {
 		for (i = 0; i < NumGamepads; i++)
