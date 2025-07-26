@@ -39,10 +39,10 @@ static const Word VidPics[] = {rFaceShapes,rFace512,rFace640,rFace640};		/* Reso
 SDL_Window *SdlWindow = NULL;
 SDL_Renderer *SdlRenderer = NULL;
 SDL_Surface *CurrentSurface = NULL;
+SDL_Texture *MacFontTexture = NULL;
 static SDL_Surface *ScreenSurface = NULL;
 static SDL_Texture *ScreenTexture = NULL;
 static SDL_Texture *FramebufferTexture = NULL;
-static SDL_Surface *UISurface = NULL;
 static SDL_Palette *ScreenPalette = NULL;
 static SDL_AudioDeviceID SdlAudioDevice = 0;
 static SDL_AudioStream *SdlSfxChannels[NAUDIOCHANS] = { NULL };
@@ -60,6 +60,8 @@ char *SaveFileName = NULL;
 
 extern tsf *MusicSynth;
 extern int SelectedMenu;
+extern const unsigned char MacFont[];
+extern const unsigned int MacFont_len;
 
 static void CloseAudio(void);
 static Boolean ChangeAudioDevice(SDL_AudioDeviceID ID, const SDL_AudioSpec *Fmt);
@@ -169,8 +171,6 @@ static void Cleanup(int status)
 		tsf_close(MusicSynth);
 	if (ScreenSurface)
 		SDL_DestroySurface(ScreenSurface);
-	if (UISurface)
-		SDL_DestroySurface(UISurface);
 	if (ScreenTexture)
 		SDL_DestroyTexture(ScreenTexture);
 	if (FramebufferTexture)
@@ -275,6 +275,12 @@ void ClearFrameBuffer(void)
 
 void RenderScreen(void)
 {
+	SDL_SetRenderTarget(SdlRenderer, FramebufferTexture);
+	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
+}
+
+void PresentScreen(void)
+{
 	SDL_SetRenderTarget(SdlRenderer, NULL);
 	SetPresentationMode();
 	SDL_RenderTexture(SdlRenderer, FramebufferTexture, NULL, NULL);
@@ -283,33 +289,11 @@ void RenderScreen(void)
 	SDL_RenderClear(SdlRenderer);
 }
 
-void StartUIOverlay(void)
-{
-	SDL_SetRenderTarget(SdlRenderer, FramebufferTexture);
-	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
-	VideoPointer = UISurface->pixels;
-	CurrentSurface = UISurface;
-	ClearTheScreen(WHITE);
-	ClearScreenTexture();
-	SDL_SetTextureBlendMode(ScreenTexture, SDL_BLENDMODE_BLEND);
-}
-
-void EndUIOverlay(void)
-{
-	VideoPointer = ScreenSurface->pixels;
-	CurrentSurface = ScreenSurface;
-	BlitSurface(UISurface, NULL);
-	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
-	SDL_SetTextureBlendMode(ScreenTexture, SDL_BLENDMODE_NONE);
-	RenderScreen();
-}
-
 void BlastScreen(void)
 {
 	BlitScreen();
-	SDL_SetRenderTarget(SdlRenderer, FramebufferTexture);
-	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
 	RenderScreen();
+	PresentScreen();
 }
 
 void BlastScreen2(Rect *BlastRect)
@@ -325,7 +309,7 @@ Boolean ProcessGlobalEvent(SDL_Event *Event)
 			GoodBye();
 			__builtin_unreachable();
 		case SDL_EVENT_WINDOW_RESIZED:
-			RenderScreen();
+			PresentScreen();
 			return TRUE;
 		case SDL_EVENT_GAMEPAD_ADDED:
 			SDL_OpenGamepad(Event->gdevice.which);
@@ -671,10 +655,39 @@ void UpdateVideoSettings(void)
 	SDL_SetTextureScaleMode(FramebufferTexture, ScreenFilter);
 }
 
+static void InitMacFont(void)
+{
+	const uint8_t *FontStart;
+	SDL_Surface *FontSurface;
+	SDL_Surface *FontTexSurface;
+	SDL_Palette *Palette;
+	int FontHeight;
+	static const SDL_Color Font1BitColors[2] = {{ 0, 0, 0, 0}, {255, 255, 255, 255}};
+
+	if (MacFontTexture) {
+		SDL_DestroyTexture(MacFontTexture);
+		MacFontTexture = NULL;
+	}
+
+	FontStart = (95+95)*4+MacFont;
+	FontHeight = (MacFont+MacFont_len-FontStart)/(128/8);
+	FontSurface = SDL_CreateSurfaceFrom(128, FontHeight, SDL_PIXELFORMAT_INDEX1LSB, (void*)FontStart, 128/8);
+	if (FontSurface) {
+		Palette = SDL_CreateSurfacePalette(FontSurface);
+		if (Palette) {
+			SDL_SetPaletteColors(Palette, Font1BitColors, 0, ARRAYLEN(Font1BitColors));
+			FontTexSurface = SDL_ConvertSurface(FontSurface, SDL_PIXELFORMAT_ABGR8888);
+			SDL_DestroySurface(FontSurface);
+			if (FontTexSurface) {
+				MacFontTexture = SDL_CreateTextureFromSurface(SdlRenderer, FontTexSurface);
+				SDL_DestroySurface(FontTexSurface);
+			}
+		}
+	}
+}
+
 void ResizeGameWindow(Word Width, Word Height)
 {
-	SDL_Palette *Palette;
-
 	if (Width == MacWidth && Height == MacHeight)
 		return;
 	if ((Width != MacWidth || Height != MacHeight) && MathSize != (Word)-1)
@@ -690,17 +703,15 @@ void ResizeGameWindow(Word Width, Word Height)
 		SdlRenderer = SDL_CreateRenderer(SdlWindow, NULL);
 		if (!SdlRenderer)
 			BailOut("SDL_CreateRenderer: %s", SDL_GetError());
+		InitMacFont();
 	} else {
 		if (ScreenSurface)
 			SDL_DestroySurface(ScreenSurface);
-		if (UISurface)
-			SDL_DestroySurface(UISurface);
 		if (ScreenTexture)
 			SDL_DestroyTexture(ScreenTexture);
 		if (FramebufferTexture)
 			SDL_DestroyTexture(FramebufferTexture);
 		ScreenSurface = NULL;
-		UISurface = NULL;
 		ScreenTexture = NULL;
 		FramebufferTexture = NULL;
 	}
@@ -715,17 +726,6 @@ void ResizeGameWindow(Word Width, Word Height)
 	ScreenPalette = SDL_CreateSurfacePalette(ScreenSurface);
 	if (!ScreenPalette)
 		BailOut("SDL_CreateSurfacePalette: %s", SDL_GetError());
-	UISurface = SDL_CreateSurface(MacWidth, MacHeight, SDL_PIXELFORMAT_INDEX8);
-	if (!UISurface)
-		BailOut("SDL_CreateSurface: %s", SDL_GetError());
-	Palette = SDL_CreateSurfacePalette(UISurface);
-	if (!Palette)
-		BailOut("SDL_CreateSurfacePalette: %s", SDL_GetError());
-	if (ResourceLength(rGamePal) >= 768) {
-		SetPalette(Palette, LoadAResource(rGamePal));
-		ReleaseAResource(rGamePal);
-	}
-	SDL_SetSurfaceColorKey(UISurface, TRUE, 0);
 	ScreenTexture = SDL_CreateTexture(SdlRenderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, MacWidth, MacHeight);
 	if (!ScreenTexture)
 		BailOut("SDL_CreateTexture: %s", SDL_GetError());
@@ -738,8 +738,6 @@ void ResizeGameWindow(Word Width, Word Height)
 
 	if (SDL_MUSTLOCK(ScreenSurface))
 		SDL_LockSurface(ScreenSurface);
-	if (SDL_MUSTLOCK(UISurface))
-		SDL_LockSurface(UISurface);
 	VideoPointer = ScreenSurface->pixels;
 	VideoWidth = ScreenSurface->pitch;
 	InitYTable();				/* Init the game's YTable */
@@ -937,7 +935,7 @@ void DrawPsyched(Word Index)
 	SDL_RenderTexture(SdlRenderer, ScreenTexture, NULL, NULL);
 	SDL_SetRenderDrawColor(SdlRenderer, 255, 0, 0, 255);
 	SDL_RenderFillRect(SdlRenderer, &PsychedRect);
-	RenderScreen();
+	PresentScreen();
 }
 
 void EndGetPsyched(void)

@@ -410,6 +410,7 @@ ResourceFile *TryResourcePath(const char *FileName, char **Found)
 	return LoadResourceStream(File);
 }
 
+
 void InitResources(void)
 {
 	FILE *File;
@@ -422,6 +423,7 @@ void InitResources(void)
 
 	if (MainResources)
 		return;
+
 	Dirs[0] = PrefPath();
 	Dirs[1] = SDL_GetBasePath();
 	for (i = 0; i < ARRAYLEN(Dirs); i++) {

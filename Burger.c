@@ -21,7 +21,7 @@
 Word DoEvent(SDL_Event *event);
 void BlastScreen(void);
 
-extern unsigned char MacFont[];
+extern const unsigned char MacFont[];
 unsigned char *VideoPointer;	/* Pointer to video memory */
 Word VideoWidth;				/* Width to each video scan line */
 Word SystemState=SfxActive|MusicActive;				/* Sound on/off flags */
@@ -32,8 +32,7 @@ Word KilledSong;				/* Song that's currently playing */
 LongWord LastTick;				/* Last system tick (60hz) */
 Word FontX;						/* X Coord of font */
 Word FontY;						/* Y Coord of font */
-Rect FontClip = { 0, 0, 0x7FFF, 0x7FFF };
-Byte FontColor = 255;			/* Colors for font */
+SDL_FRect FontClip = { 0, 0, SDL_MAX_UINT32, SDL_MAX_UINT32 };
 LongWord YTable[480];			/* Offsets to the screen */
 //SndChannelPtr myPaddleSndChan;	/* Sound channel */
 //Word ScanCode;
@@ -44,8 +43,9 @@ LongWord YTable[480];			/* Offsets to the screen */
 //extern Boolean DoQuickDraw;
 
 typedef struct {
+	uint8_t x, y;
 	uint8_t w: 4, h: 4;
-	uint8_t xa: 4, yo: 4;
+	uint8_t xp: 2, xn: 2, yo: 4;
 } glyph_t;
 
 /**********************************
@@ -486,14 +486,14 @@ void ClearTheScreen(Word Color)
 void DrawAString(const char *TextPtr)
 {
 	Word X = FontX;
-	while (TextPtr[0]) {				/* At the end of the string? */
-		if (TextPtr[0] == '\n') {
+	Uint32 C;
+	while ((C = SDL_StepUTF8(&TextPtr, NULL))) {				/* At the end of the string? */
+		if (C == '\n') {
 			FontX = X;
 			FontY += 14;
 		} else {
-			DrawAChar(TextPtr[0]);	/* Draw the char */
+			DrawAChar(C);	/* Draw the char */
 		}
-		++TextPtr;						/* Continue */
 	}
 }
 
@@ -512,9 +512,9 @@ void SetFontXY(Word x,Word y)
 void FontSetClip(const Rect *R)
 {
 	if (R)
-		FontClip = *R;
+		FontClip = (SDL_FRect) {R->left, R->top, R->right - R->left, R->bottom - R->top};
 	else
-		FontClip = (Rect){ 0, 0, 0x7FFF, 0x7FFF };
+		FontClip = (SDL_FRect) { 0, 0, SDL_MAX_UINT32, SDL_MAX_UINT32 };
 }
 
 /**********************************
@@ -525,7 +525,10 @@ void FontSetClip(const Rect *R)
 
 void FontSetColor(Word Color)
 {
-	FontColor = Color;
+	if (!MacFontTexture)
+		return;
+	Color = 255 - Color;
+	SDL_SetTextureColorMod(MacFontTexture, Color, Color, Color);
 }
 
 
@@ -535,69 +538,44 @@ void FontSetColor(Word Color)
 
 **********************************/
 
-void DrawAChar(Word Letter)
+void DrawAChar(LongWord CodePoint)
 {
-	int Width;
-	int Height;
-	int MinX;
-	int MinY;
-	int MaxX;
-	int MaxY;
-	int Y;
-	int Width2;
-	const Byte *Font;
-	unsigned char *ScreenPtr;
-	unsigned char *Screenad;
 	const glyph_t *Glyph;
+	float x, y;
+	SDL_FRect Src;
+	SDL_FRect Dest;
 
-	if (FontX >= SCREENWIDTH || FontX >= FontClip.right)
+	if (CodePoint == '\r' || CodePoint == '\n') {
 		return;
-	if (FontY >= SCREENHEIGHT || FontY >= FontClip.bottom)
+	} else if (CodePoint == ' ') {
+		FontX += 4;
 		return;
-
-	Letter -= 32;			/* Offset from the first entry */
-	if (Letter>=128-32) {	/* In the font? */
-		return;				/* Exit then! */
+	} else if (CodePoint == '\t') {
+		FontX = (FontX+15+4)&~15;
+		return;
+	} else if (CodePoint > ' ' && CodePoint < 0x7F) {
+		CodePoint -= 33;			/* Offset from the first entry */
+	} else if (CodePoint >= 0xA1 && CodePoint < 0x100) {
+		CodePoint = CodePoint - 0xA1 + 95;
+	} else {
+		CodePoint = 94;			/* Unknown character glyph */
 	}
-	Glyph = (const glyph_t*)&MacFont[(MacFont[Letter*2]<<8)|MacFont[Letter*2+1]];
-	Width = Glyph->w;		/* Get the pixel width of the entry */
-	Height = Glyph->h;
-	Font = (const Byte*)&Glyph[1];
-	Y = FontY + Glyph->yo;
-	if (FontX + Width <= FontClip.left)
-		return;
-	if (Y + Height <= FontClip.top)
-		return;
+	Glyph = &((const glyph_t*)MacFont)[CodePoint];
 
-	MinX = FontClip.left > 0 ? FontClip.left : 0;
-	MinY = FontClip.top > 0 ? FontClip.top : 0;
-	MaxX = FontClip.right < SCREENWIDTH ? FontClip.right : SCREENWIDTH;
-	MaxY = FontClip.bottom < SCREENHEIGHT ? FontClip.bottom : SCREENHEIGHT;
-	ScreenPtr = (unsigned char *) &VideoPointer[YTable[Y]+FontX];
-	if (FontX < MinX) {
-		Width -= MinX - FontX;
-		ScreenPtr += MinX - FontX;
-	}
-	if (Y < MinY) {
-		Height -= MinY - Y;
-		ScreenPtr += VideoWidth * (MinY - Y);
-	}
-	FontX += Glyph->xa;
-	if (FontX > MaxX)
-		Width -= FontX - MaxX;
-	if (Y + Height > MaxY)
-		Height = MaxY - Y;
-	FontX++;
-
-	for (; Height > 0; Height--) {
-		Screenad = ScreenPtr;
-		for (Width2 = Width; Width2 > 0; Width2--) {
-			if (*Font++)
-				*Screenad = FontColor;
-			Screenad++;
+	if (MacFontTexture) {
+		x = FontX + Glyph->xp;
+		y = FontY + Glyph->yo;
+		Dest = (SDL_FRect){x, y, Glyph->w, Glyph->h};
+		Dest.x = SDL_max(FontClip.x, Dest.x);
+		Dest.y = SDL_max(FontClip.y, Dest.y);
+		Dest.w = SDL_min(FontClip.x + FontClip.w, Dest.x + Dest.w) - Dest.x;
+		Dest.h = SDL_min(FontClip.y + FontClip.h, Dest.y + Dest.h) - Dest.y;
+		if (Dest.w > 0.f && Dest.h > 0.f) {
+			Src = (SDL_FRect){ Glyph->x + (Dest.x - x), Glyph->y + (Dest.y - y), Dest.w, Dest.h };
+			SDL_RenderTexture(SdlRenderer, MacFontTexture, &Src, &Dest);
 		}
-		ScreenPtr += VideoWidth;
 	}
+	FontX += Glyph->xp + Glyph->w + Glyph->xn;
 }
 
 /**********************************

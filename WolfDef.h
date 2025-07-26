@@ -535,10 +535,11 @@ extern Byte textures[MAPSIZE*2+5][MAPSIZE]; /* 0-63 is horizontal, 64-127 is ver
 
 extern void InitTools(void);
 extern void BlitScreen(void);
+extern void RenderScreen(void);
 extern void BlastScreen(void);
 extern void BlastScreen2(Rect *BlastRect);
 extern void ClearFrameBuffer(void);
-extern void RenderScreen(void);
+extern void PresentScreen(void);
 extern void BailOut(const char *Fmt, ...) __attribute__((format(printf, 1, 2)));
 extern void GoodBye(void);
 extern exit_t ReadSystemJoystick(void);

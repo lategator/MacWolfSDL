@@ -10,6 +10,7 @@ typedef struct ResourceFile ResourceFile;
 extern SDL_Window *SdlWindow;
 extern SDL_Renderer *SdlRenderer;
 extern SDL_Surface *CurrentSurface;
+extern SDL_Texture *MacFontTexture;
 extern ResourceFile *MainResources;
 extern SDL_Keycode KeyBinds[12];
 extern char *ScenarioPath;
@@ -22,7 +23,5 @@ extern void EnumerateLevels(SDL_EnumerateDirectoryCallback callback, void *userd
 extern void SetPalette(SDL_Palette *Palette, unsigned char *PalPtr);
 extern void BlitSurface(SDL_Surface *Surface, const SDL_Rect *Rect);
 extern void BlitScreen(void);
-extern void StartUIOverlay(void);
-extern void EndUIOverlay(void);
 extern Boolean ProcessGlobalEvent(SDL_Event *Event);
 extern SDL_Surface *LoadPict(ResourceFile *Rp, Word PicNum);

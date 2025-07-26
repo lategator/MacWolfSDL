@@ -42,7 +42,6 @@ typedef struct Rect                     Rect;
 #define PERIWINKLE 120
 #define LIGHTGREY 43
 #define WHITE 0
-#define WHITE2 31
 
 #define SfxActive 1
 #define MusicActive 2
@@ -107,7 +106,7 @@ void SetFontXY(Word x,Word y);
 void FontSetClip(const Rect *Rect);
 void FontSetColor(Word Color);
 void DrawAString(const char *TextPtr);
-void DrawAChar(Word Letter);
+void DrawAChar(LongWord CodePoint);
 Word GetRandom(Word Range);
 void Randomize(void);
 void DrawShape(Word x,Word y,void *ShapePtr);

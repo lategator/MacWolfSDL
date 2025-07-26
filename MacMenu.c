@@ -2,7 +2,6 @@
 #include "WolfDef.h"
 #include "SDLWolf.h"
 #include <string.h>
-#include <ctype.h>
 
 typedef enum {
 	WS_SELECTED = 1,
@@ -180,7 +179,7 @@ static void MenuBarItemRender(widget_t *Widget, widgetstate_t State, void *Data)
 		DrawFilledFrame(&Menu->rect);
 		DrawDropShadow(&Menu->rect);
 		RenderWidgets(Menu->entries, Menu->n_entries, Menu->selected, -1, Data);
-		FontSetColor(WHITE2);
+		FontSetColor(WHITE);
 	} else {
 		FontSetColor(BLACK);
 	}
@@ -198,9 +197,9 @@ static void MenuItemRender(widget_t *Widget, widgetstate_t State, void *Data)
 
 	if (Item->disabled) {
 		State = 0;
-		Color = 0x17;
+		Color = 255 - 171;
 	} else if (State & WS_SELECTED) {
-		Color = WHITE2;
+		Color = WHITE;
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 		SDL_RenderFillRect(SdlRenderer,&FRect(&Widget->rect));
 	} else {
@@ -340,21 +339,10 @@ static widgetclass_t MenuSeparatorClass = { MenuSeparatorRender, NULL };
 static widgetclass_t VScrollBarClass = { VScrollBarRender, VScrollBarClick };
 static widgetclass_t EmptyClass = { NULL, NULL };
 
-static const char LatinSupp[64] =
-"AAAAAAAC"
-"EEEEIIII"
-"DNOOOOOx"
-"OUUUUYpB"
-"aaaaaaac"
-"eeeeiiii"
-"dnooooo/"
-"ouuuuypy";
-
 static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, const char *Name)
 {
 	char *NameBuf;
 	char *Path;
-	char *s;
 	const char *t;
 	ResourceFile *Rp;
 	scenario_t *Scenario;
@@ -363,19 +351,7 @@ static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, c
 
 	NameLen = SDL_strlen(Name);
 	NameBuf = AllocSomeMem(NameLen+1);
-	for (s = NameBuf, t = Name; *t; s++) {
-		c = SDL_StepUTF8(&t, &NameLen);
-		if (c < 128 && isspace(c))
-			*s = ' ';
-		else if (c >= 0xC0 && c < 0x100)
-			*s = LatinSupp[c - 0xC0];
-		else if (c < ' ' || c >= 0x80)
-			*s = '_';
-		else
-			*s = c;
-	}
-	*s = '\0';
-	NameLen = s - NameBuf;
+	memcpy(NameBuf, Name, NameLen+1);
 	if (NameLen >= 5 && !SDL_strcasecmp(".rsrc", &NameBuf[NameLen-5]))
 		NameBuf[NameLen-5] = '\0';
 
@@ -425,27 +401,17 @@ static void DrawScenarioList(void)
 	if (ScenarioCount)
 		ScenarioPic = Scenarios[MenuPosY].pic;
 	BlitScenarioSelect(MenuBG, ScenarioPic, &(SDL_Rect){231, 17, 96, 64});
-	StartUIOverlay();
+	RenderScreen();
 	if (!ScenarioPic) {
 		SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 		SDL_RenderFillRect(SdlRenderer, &(SDL_FRect){231, 17, 96, 64});
 	}
 	DrawFilledFrame(&RectMod(&ScenarioListRect,0,0,16,0));
 	if (!MenuBG) {
-		FontSetColor(WHITE2);
+		FontSetColor(WHITE);
 		SetFontXY(48, 39);
 		FontSetClip(NULL);
 		DrawAString("Which scenario?");
-	}
-	FontSetColor(BLACK);
-	FontSetClip(&ScenarioListRect);
-	Y = ScenarioListRect.top;
-	Max = MenuScrollY + ScenariosItemHeight;
-	Max = Max < ScenarioCount ? Max : ScenarioCount;
-	for (i = MenuScrollY; i < Max; i++) {
-		SetFontXY(17, Y+1);
-		DrawAString(Scenarios[i].name);
-		Y += 16;
 	}
 	RenderWidgets(ScenarioWidgets, 2, -1, -1, NULL);
 	if (ScenarioCount) {
@@ -458,7 +424,17 @@ static void DrawScenarioList(void)
 	}
 	SDL_SetRenderDrawColor(SdlRenderer, 0, 0, 0, 255);
 	SDL_RenderRect(SdlRenderer, &FRect(&ScenarioListRect));
-	EndUIOverlay();
+	FontSetColor(BLACK);
+	FontSetClip(&ScenarioListRect);
+	Y = ScenarioListRect.top;
+	Max = MenuScrollY + ScenariosItemHeight;
+	Max = Max < ScenarioCount ? Max : ScenarioCount;
+	for (i = MenuScrollY; i < Max; i++) {
+		SetFontXY(17, Y+1);
+		DrawAString(Scenarios[i].name);
+		Y += 16;
+	}
+	PresentScreen();
 }
 
 static int CompareScenario(const void *a, const void *b)
@@ -620,16 +596,18 @@ static void DrawGameDiff(void)
 {
 	Rect *R;
 
-	if (MenuBG)
+	ClearFrameBuffer();
+	if (MenuBG) {
 		BlitSurface(MenuBG, NULL);
-	StartUIOverlay();
+		RenderScreen();
+	}
 	if (MenuPosY < 4) {
 		SDL_SetRenderDrawColor(SdlRenderer, 255, 255, 255, 255);
 		R = &DifficultyWidgets[MenuPosY].rect;
 		SDL_RenderRects(SdlRenderer,(SDL_FRect[3]){FRect(R), FRectShrink(R, 1), FRectShrink(R, 2)}, 3);
 	}
 	ButtonRender(&DifficultyWidgets[4], MenuPosY == 4, NULL);
-	EndUIOverlay();
+	PresentScreen();
 }
 
 Word ChooseGameDiff(void)
@@ -727,7 +705,7 @@ TryIt:
 			SDL_free(ScenarioPath);
 		ScenarioPath = NextScenarioPath;
 		ClearFrameBuffer();
-		RenderScreen();
+		PresentScreen();
 		RetVal = MountMapFile(ScenarioPath);
 		LoadMapSetData();
 		playstate = EX_NEWGAME;	/* Start a new game */
@@ -815,7 +793,7 @@ int DoMenuCommand(int Menu, int Item)
 			FullScreen^=1;
 			SDL_SetWindowFullscreen(SdlWindow, FullScreen);
 			UpdateVideoSettings();
-			RenderScreen();
+			PresentScreen();
 			break;
 		case 1:
 			SystemState^=SfxActive;				/* Sound on/off flags */
@@ -1163,6 +1141,7 @@ exit_t PauseMenu(Boolean Shape)
 	MENUITEM(&FileMenu.entries[3])->disabled = !Playing;
 	MENUITEM(&FileMenu.entries[4])->disabled = !Playing;
 	UngrabMouse();
+	ClearFrameBuffer();
 	if (Shape) {
 		ShapePtr = LoadCompressedShape(rPauseShape);
 		if (ShapePtr) {
@@ -1170,9 +1149,9 @@ exit_t PauseMenu(Boolean Shape)
 			BlitScreen();
 		}
 	}
-	StartUIOverlay();
+	RenderScreen();
 	DrawMainMenu(SelectedMenu);
-	EndUIOverlay();
+	PresentScreen();
 	for (;;) {
 		if (!Click)
 			WaitTick();
@@ -1329,15 +1308,16 @@ exit_t PauseMenu(Boolean Shape)
 		}
 		if (Redraw) {
 		Draw:
+			ClearFrameBuffer();
 			BlitScreen();
-			StartUIOverlay();
+			RenderScreen();
 			switch (OpenDialog) {
 				case 0: DrawMainMenu(SelectedMenu); break;
 				case 1: DrawVideoDialog(); break;
 				case 2: DrawKeyboardDialog(); break;
 					default: break;
 			}
-			EndUIOverlay();
+			PresentScreen();
 		}
 	}
 	if (ShapePtr)
