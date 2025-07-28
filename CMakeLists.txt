@@ -43,11 +43,13 @@ if(APPLE OR WIN32)
 else()
 	set(exe_name macwolfsdl)
 endif()
-add_executable(${exe_name} WIN32 MACOSX_BUNDLE
+set(SRCS
 	Burger.c Data.c Doors.c EnMove.c EnThink.c InterMis.c Intro.c Level.c
 	MacFont.c MacLoader.c MacMenu.c Missiles.c Music.c PlMove.c PlStuff.c
 	PlThink.c PushWall.c RefBsp.c Refresh2.c Refresh.c RefSprite.c SDLWolf.c
 	SetupScalers.c Sight.c SnesMain.c StateDef.c WolfIO.c WolfMain.c)
+list(TRANSFORM SRCS PREPEND src/)
+add_executable(${exe_name} WIN32 MACOSX_BUNDLE ${SRCS})
 target_link_libraries(${exe_name} PRIVATE SDL3::SDL3)
 
 if(WIN32)
