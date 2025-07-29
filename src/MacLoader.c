@@ -25,9 +25,9 @@
 
 static const char *MainResourceFileNames[] = {
 "Wolfenstein 3D", "Wolfenstein 3D\u2122", "Wolfenstein3D", "Wolf3D"};
-static const char *ResourceFileExtensions[] = {"bin","macbin","rsrc"};
+static const char *ResourceFileExtensions[] = {"bin","macbin","rsrc","w3d"};
 static const char *LevelsFolder = "Levels/";
-static const char *DefaultLevelsPath = "Levels/ Second Encounter (30 Levels).rsrc";
+static const char *DefaultLevelsPath = "Levels/Second Encounter (30 Levels).bin";
 
 static const uint32_t BrgrType = 0x42524752; /* BRGR */
 static const uint32_t PictType = 0x50494354; /* PICT */

@@ -341,19 +341,31 @@ static widgetclass_t EmptyClass = { NULL, NULL };
 
 static SDL_EnumerationResult MakeScenarioList(void *UserData, const char *Dir, const char *Name)
 {
+	const char *n;
 	char *NameBuf;
 	char *Path;
-	const char *t;
 	ResourceFile *Rp;
 	scenario_t *Scenario;
 	size_t NameLen;
 	Uint32 c;
 
 	NameLen = SDL_strlen(Name);
+	n = Name;
+	while ((*n <= 127 && SDL_isspace(*n))) {
+		n++;
+		NameLen--;
+	}
 	NameBuf = AllocSomeMem(NameLen+1);
-	memcpy(NameBuf, Name, NameLen+1);
+	memcpy(NameBuf, n, NameLen+1);
+	NameBuf[NameLen] = '\0';
 	if (NameLen >= 5 && !SDL_strcasecmp(".rsrc", &NameBuf[NameLen-5]))
 		NameBuf[NameLen-5] = '\0';
+	else if (NameLen >= 4 && !SDL_strcasecmp(".bin", &NameBuf[NameLen-4]))
+		NameBuf[NameLen-4] = '\0';
+	else if (NameLen >= 4 && !SDL_strcasecmp(".w3d", &NameBuf[NameLen-4]))
+		NameBuf[NameLen-4] = '\0';
+	else if (NameLen >= 7 && !SDL_strcasecmp(".macbin", &NameBuf[NameLen-7]))
+		NameBuf[NameLen-7] = '\0';
 
 	Path = AllocFormatStr("%s%s", Dir, Name);
 	Rp = LoadResources(Path);

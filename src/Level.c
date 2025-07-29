@@ -594,7 +594,7 @@ Boolean SetupGameLevel(void)
 
 	ReleaseMap();				/* Free up any previous map */
 	if (!MapListPtr)
-		return FALSE;
+		BailOut("No levels found in scenario file");
 	OldMapNum = (MapListPtr->MapRezNum)+gamestate.mapon;	/* Which map to load */
 	Length = ResourceLength(OldMapNum);
 	if (Length < sizeof *MapPtr)
