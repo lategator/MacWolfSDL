@@ -56,6 +56,8 @@ static Word SdlSfxNums[NAUDIOCHANS];
 static Byte *GameShapeBuffer = NULL;
 static char *MyPrefPath = NULL;
 static SDL_Storage *MyPrefStorage = NULL;
+static char *LastSaveDir = NULL;
+static char *LastScenarioDir = NULL;
 char *SaveFileName = NULL;
 
 extern tsf *MusicSynth;
@@ -186,8 +188,9 @@ static void Cleanup(int status)
 		SDL_CloseStorage(MyPrefStorage);
 
 	SDL_Quit();
-	if (SaveFileName)
-		SDL_free(SaveFileName);
+	SDL_free(SaveFileName);
+	SDL_free(LastSaveDir);
+	SDL_free(LastScenarioDir);
 	exit(status);
 }
 
@@ -1192,17 +1195,16 @@ static SDL_AtomicInt DialogStatus;
 #define PATH_SEP '/'
 #endif
 
-static char *SetupFileDialog(void)
+static inline void SetupFileDialog(void)
 {
-	const char *Dir;
-
 	SDL_SetAtomicInt(&DialogStatus, -1);
+	/*
 	if (SaveFileName) {
 		Dir = SDL_strrchr(SaveFileName, PATH_SEP);
 		if (Dir)
 			return SDL_strndup(SaveFileName, Dir - SaveFileName);
 	}
-	return NULL;
+	*/
 }
 
 static Boolean WaitDialog(void)
@@ -1223,6 +1225,7 @@ static Boolean WaitDialog(void)
 static void ScenarioFileChosen(void *userdata, const char * const *filelist, int filter)
 {
 	SDL_Event Event;
+	char *Dir;
 
 	if (!filelist || !*filelist) {
 		SDL_SetAtomicInt(&DialogStatus, 0);
@@ -1232,6 +1235,16 @@ static void ScenarioFileChosen(void *userdata, const char * const *filelist, int
 			SDL_free(NextScenarioPath);
 		NextScenarioPath = SDL_strdup(*filelist);
 		if (!NextScenarioPath) BailOut("Out of memory");
+		if (LastScenarioDir) {
+			SDL_free(LastScenarioDir);
+			LastScenarioDir = NULL;
+		}
+		Dir = SDL_strrchr(NextScenarioPath, PATH_SEP);
+		if (Dir) {
+			LastScenarioDir = SDL_strndup(NextScenarioPath, Dir - NextScenarioPath);
+			if (!LastScenarioDir) BailOut("Out of memory");
+			SavePrefs();
+		}
 	}
 	Event.type = SDL_EVENT_USER;
 	SDL_PushEvent(&Event);
@@ -1239,15 +1252,15 @@ static void ScenarioFileChosen(void *userdata, const char * const *filelist, int
 
 Boolean ChooseLoadScenario(void)
 {
-	char *Dir = SetupFileDialog();
-	SDL_ShowOpenFileDialog(ScenarioFileChosen, NULL, SdlWindow, NULL, 0, Dir, FALSE);
-	if (Dir) SDL_free(Dir);
+	SetupFileDialog();
+	SDL_ShowOpenFileDialog(ScenarioFileChosen, NULL, SdlWindow, NULL, 0, LastScenarioDir, FALSE);
 	return WaitDialog();
 }
 
 static void SaveFileChosen(void *userdata, const char * const *filelist, int filter)
 {
 	SDL_Event Event;
+	char *Dir;
 
 	if (!filelist || !*filelist) {
 		SDL_SetAtomicInt(&DialogStatus, 0);
@@ -1257,6 +1270,16 @@ static void SaveFileChosen(void *userdata, const char * const *filelist, int fil
 			SDL_free(SaveFileName);
 		SaveFileName = SDL_strdup(*filelist);
 		if (!SaveFileName) BailOut("Out of memory");
+		if (LastSaveDir) {
+			SDL_free(LastSaveDir);
+			LastSaveDir = NULL;
+		}
+		Dir = SDL_strrchr(SaveFileName, PATH_SEP);
+		if (Dir) {
+			LastSaveDir = SDL_strndup(SaveFileName, Dir - SaveFileName);
+			if (!LastSaveDir) BailOut("Out of memory");
+			SavePrefs();
+		}
 	}
 	Event.type = SDL_EVENT_USER;
 	SDL_PushEvent(&Event);
@@ -1264,9 +1287,8 @@ static void SaveFileChosen(void *userdata, const char * const *filelist, int fil
 
 Boolean ChooseLoadGame(void)
 {
-	char *Dir = SetupFileDialog();
-	SDL_ShowOpenFileDialog(SaveFileChosen, NULL, SdlWindow, NULL, 0, Dir, FALSE);
-	if (Dir) SDL_free(Dir);
+	SetupFileDialog();
+	SDL_ShowOpenFileDialog(SaveFileChosen, NULL, SdlWindow, NULL, 0, LastSaveDir, FALSE);
 	return WaitDialog();
 }
 
@@ -1284,9 +1306,8 @@ Boolean ChooseSaveGame(void)
 
 	if (playstate != EX_STILLPLAYING && playstate != EX_AUTOMAP)
 		return FALSE;
-	Dir = SetupFileDialog();
-	SDL_ShowSaveFileDialog(SaveFileChosen, NULL, SdlWindow, NULL, 0, NULL);
-	if (Dir) SDL_free(Dir);
+	SetupFileDialog();
+	SDL_ShowSaveFileDialog(SaveFileChosen, NULL, SdlWindow, NULL, 0, LastSaveDir);
 	return WaitDialog();
 }
 
@@ -1345,6 +1366,14 @@ static int PrefsIniHandler(void* User, const char* Section, const char* Name, co
 					KeyBinds[ARRAYLEN(KeyBinds)-1-i] = Code;
 			}
 		}
+	} else if (SDL_strcasecmp(Section, "folders") == 0) {
+		if (SDL_strcasecmp(Name, "savedir") == 0) {
+			SDL_free(LastSaveDir);
+			LastSaveDir = SDL_strdup(Value);
+		} else if (SDL_strcasecmp(Name, "loadscenariodir") == 0) {
+			SDL_free(LastScenarioDir);
+			LastScenarioDir = SDL_strdup(Value);
+		}
 	}
 	return 1;
 }
@@ -1385,15 +1414,24 @@ Done:
 
 void SavePrefs(void)
 {
-	char Buf[4096];
-	char * const End = Buf + sizeof Buf;
-	char *B = Buf;
+	size_t BufLen;
+	char *Buf;
+	char *End;
+	char *B;
 	SDL_Storage *Storage;
 	int i;
 
 	Storage = PrefStorage();
 	if (!Storage)
 		return;
+
+	BufLen = 4096;
+	BufLen += LastSaveDir ? strlen(LastSaveDir) : 0;
+	BufLen += LastScenarioDir ? strlen(LastScenarioDir) : 0;
+	Buf = AllocSomeMem(BufLen);
+	B = Buf;
+	End = Buf + BufLen;
+
 	B += snprintf(B, End - B, "[Main]\n");
 	B += snprintf(B, End - B, "Mouse = %d\n", MouseEnabled);
 	B += snprintf(B, End - B, "Governor = %d\n", SlowDown);
@@ -1413,7 +1451,13 @@ void SavePrefs(void)
 	for (i = 0; i < ARRAYLEN(KeyBinds); i++)
 		B += snprintf(B, End - B, "%s = %s\n", KeyPrefNames[i], SDL_GetScancodeName(KeyBinds[11-i]));
 	B += snprintf(B, End - B, "\n");
+	B += snprintf(B, End - B, "[Folders]\n");
+	if (LastSaveDir)
+		B += snprintf(B, End - B, "SaveDir = %s\n", LastSaveDir);
+	if (LastScenarioDir)
+		B += snprintf(B, End - B, "LoadScenarioDir = %s\n", LastScenarioDir);
 	SDL_WriteStorageFile(Storage, PrefsFile, Buf, B - Buf);
+	FreeSomeMem(Buf);
 }
 
 /**********************************
