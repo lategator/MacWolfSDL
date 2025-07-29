@@ -338,6 +338,8 @@ static ResourceFile *LoadMacBinary(FILE *File)
 		goto Done;
 	if (strncmp(Header.FileType, "APPL", 4)
 		&& strncmp(Header.FileType, "MAPS", 4)
+		&& strncmp(Header.FileType, "W3dL", 4)
+		&& strncmp(Header.FileType, "W3L2", 4)
 		&& strncmp(Header.FileType, "????", 4)
 		&& strncmp(Header.FileCreator, "WOLF", 4)
 		&& strncmp(Header.FileCreator, "????", 4)
