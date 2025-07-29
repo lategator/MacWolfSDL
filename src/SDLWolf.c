@@ -1198,13 +1198,6 @@ static SDL_AtomicInt DialogStatus;
 static inline void SetupFileDialog(void)
 {
 	SDL_SetAtomicInt(&DialogStatus, -1);
-	/*
-	if (SaveFileName) {
-		Dir = SDL_strrchr(SaveFileName, PATH_SEP);
-		if (Dir)
-			return SDL_strndup(SaveFileName, Dir - SaveFileName);
-	}
-	*/
 }
 
 static Boolean WaitDialog(void)
@@ -1241,7 +1234,7 @@ static void ScenarioFileChosen(void *userdata, const char * const *filelist, int
 		}
 		Dir = SDL_strrchr(NextScenarioPath, PATH_SEP);
 		if (Dir) {
-			LastScenarioDir = SDL_strndup(NextScenarioPath, Dir - NextScenarioPath);
+			LastScenarioDir = SDL_strndup(NextScenarioPath, Dir - NextScenarioPath + 1);
 			if (!LastScenarioDir) BailOut("Out of memory");
 			SavePrefs();
 		}
@@ -1276,7 +1269,7 @@ static void SaveFileChosen(void *userdata, const char * const *filelist, int fil
 		}
 		Dir = SDL_strrchr(SaveFileName, PATH_SEP);
 		if (Dir) {
-			LastSaveDir = SDL_strndup(SaveFileName, Dir - SaveFileName);
+			LastSaveDir = SDL_strndup(SaveFileName, Dir - SaveFileName + 1);
 			if (!LastSaveDir) BailOut("Out of memory");
 			SavePrefs();
 		}
