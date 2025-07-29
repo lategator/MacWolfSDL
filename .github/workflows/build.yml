@@ -15,7 +15,7 @@ jobs:
     - uses: actions/checkout@v4
     - run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release .; if ($?) { cmake --build build }
     - run: strip build/MacWolfSDL.exe
-    - run: cd ./build; Compress-Archive -Path ./MacWolfSDL.exe,../LICENSES -DestinationPath ./macwolfsdl-win64-${{ github.sha }}.zip
+    - run: cd ./build; Compress-Archive -Path ./MacWolfSDL.exe,../LICENSES,../README.md -DestinationPath ./macwolfsdl-win64-${{ github.sha }}.zip
     - uses: actions/upload-artifact@v4
       with: { name: macwolfsdl-win64, path: 'build/macwolfsdl-win64-${{ github.sha }}.zip' }
 
@@ -24,7 +24,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - run: cmake -B build -G "Visual Studio 17 2022" -A Win32 .; if ($?) { cmake --build build --config Release }
-    - run: cd ./build; Compress-Archive -Path ./Release/MacWolfSDL.exe,../LICENSES -DestinationPath ./macwolfsdl-win32-${{ github.sha }}.zip
+    - run: cd ./build; Compress-Archive -Path ./Release/MacWolfSDL.exe,../LICENSES,../README.md -DestinationPath ./macwolfsdl-win32-${{ github.sha }}.zip
     - uses: actions/upload-artifact@v4
       with: { name: macwolfsdl-win32, path: 'build/macwolfsdl-win32-${{ github.sha }}.zip' }
 
@@ -34,7 +34,7 @@ jobs:
     - uses: actions/checkout@v4
     - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" . && cmake --build build
     - run: strip build/MacWolfSDL.app/Contents/MacOS/MacWolfSDL
-    - run: cd ./build && hdiutil create -volname MacWolfSDL -srcfolder ./MacWolfSDL.app -srcfolder ../LICENSES -ov -format UDZO ./macwolfsdl-macos-${{ github.sha }}.dmg
+    - run: cd ./build && hdiutil create -volname MacWolfSDL -srcfolder ./MacWolfSDL.app -srcfolder ../LICENSES -srcfolder ../README.md -ov -format UDZO ./macwolfsdl-macos-${{ github.sha }}.dmg
     - uses: actions/upload-artifact@v4
       with: { name: macwolfsdl-macos, path: 'build/macwolfsdl-macos-${{ github.sha }}.dmg' }
 
@@ -51,6 +51,6 @@ jobs:
              libxss-dev libxt-dev libxv-dev libxxf86vm-dev
     - run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release . && cmake --build build
     - run: strip build/macwolfsdl
-    - run: cd ./build && tar -czf ./macwolfsdl-ubuntu-x86_64-${{ github.sha }}.tar.gz ./macwolfsdl ../LICENSES
+    - run: cd ./build && tar -czf ./macwolfsdl-ubuntu-x86_64-${{ github.sha }}.tar.gz ./macwolfsdl ../LICENSES ../README.md
     - uses: actions/upload-artifact@v4
       with: { name: macwolfsdl-ubuntu-x86_64, path: 'build/macwolfsdl-ubuntu-x86_64-${{ github.sha }}.tar.gz' }
