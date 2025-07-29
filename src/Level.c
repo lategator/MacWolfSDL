@@ -593,6 +593,8 @@ Boolean SetupGameLevel(void)
 /* Load a level */
 
 	ReleaseMap();				/* Free up any previous map */
+	if (!MapListPtr)
+		return FALSE;
 	OldMapNum = (MapListPtr->MapRezNum)+gamestate.mapon;	/* Which map to load */
 	Length = ResourceLength(OldMapNum);
 	if (Length < sizeof *MapPtr)
