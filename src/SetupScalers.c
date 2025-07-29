@@ -55,6 +55,8 @@ void IO_ScaleWallColumn(Word X,Word Scale,Word Tile,Word Column)
 	Width = VideoWidth;
 	ScreenPtr = VideoPointer + X;
 	ArtStart = &ArtData[Tile][Column << 7];
+	if (Scale >= ARRAYLEN(ScaleDiv))
+		Scale = ARRAYLEN(ScaleDiv) - 1;
 	Frac = ScaleDiv[Scale];
 	Integer = Frac >> 24;
 
@@ -108,9 +110,10 @@ void IO_ScaleMaskedColumn(Word x,Word scale,unsigned short *CharPtr,Word column)
 	LongWord Delta;
 	Word Width;
 
-	if (!scale) {
+	if (!scale)
 		return;
-	}
+	if (scale >= ARRAYLEN(ScaleDiv))
+		scale = ARRAYLEN(ScaleDiv) - 1;
 	CharPtr2 = (Byte *) CharPtr;
 	TheFrac = ScaleDiv[scale];		/* Get the scale fraction */
 	RunPtr = (const SpriteRun *) &CharPtr[SwapUShortBE(CharPtr[column+1])/2];	/* Get the offset to the RunPtr data */
