@@ -555,6 +555,7 @@ extern void EndGetPsyched(void);
 extern Word ChooseGameDiff(void);
 extern exit_t PauseMenu(Boolean Shape);
 extern void ShareWareEnd(void);
+extern Boolean ChooseLoadScenario(void);
 extern Boolean ChooseLoadGame(void);
 extern Boolean ChooseSaveGame(void);
 extern Boolean LoadGame(void);

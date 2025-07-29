@@ -13,6 +13,7 @@ extern SDL_Surface *CurrentSurface;
 extern SDL_Texture *MacFontTexture;
 extern ResourceFile *MainResources;
 extern SDL_Keycode KeyBinds[12];
+extern char *NextScenarioPath;
 extern char *ScenarioPath;
 
 extern ResourceFile* LoadResources(const char* FileName);

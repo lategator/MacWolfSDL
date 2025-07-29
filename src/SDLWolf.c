@@ -1220,6 +1220,31 @@ static Boolean WaitDialog(void)
 	return Status;
 }
 
+static void ScenarioFileChosen(void *userdata, const char * const *filelist, int filter)
+{
+	SDL_Event Event;
+
+	if (!filelist || !*filelist) {
+		SDL_SetAtomicInt(&DialogStatus, 0);
+	} else {
+		SDL_SetAtomicInt(&DialogStatus, 1);
+		if (NextScenarioPath)
+			SDL_free(NextScenarioPath);
+		NextScenarioPath = SDL_strdup(*filelist);
+		if (!NextScenarioPath) BailOut("Out of memory");
+	}
+	Event.type = SDL_EVENT_USER;
+	SDL_PushEvent(&Event);
+}
+
+Boolean ChooseLoadScenario(void)
+{
+	char *Dir = SetupFileDialog();
+	SDL_ShowOpenFileDialog(ScenarioFileChosen, NULL, SdlWindow, NULL, 0, Dir, FALSE);
+	if (Dir) SDL_free(Dir);
+	return WaitDialog();
+}
+
 static void SaveFileChosen(void *userdata, const char * const *filelist, int filter)
 {
 	SDL_Event Event;

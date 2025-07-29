@@ -32,7 +32,7 @@ static LongWord MenuScrollY = 0;
 static LongWord ScenarioCount = 0;
 static SDL_Surface *MenuBG = NULL;
 static scenario_t *Scenarios = NULL;
-static char *NextScenarioPath = NULL;
+char *NextScenarioPath = NULL;
 char *ScenarioPath = NULL;
 int SelectedMenu = -1;
 
@@ -450,6 +450,11 @@ Word ChooseScenario(void)
 	Boolean Redraw;
 	Word RetVal = FALSE;
 
+	if (NextScenarioPath) {
+		SDL_free(NextScenarioPath);
+		NextScenarioPath = NULL;
+	}
+
 	EnumerateLevels(MakeScenarioList, NULL);
 	if (!ScenarioCount)
 			BailOut("No scenario files found!\n\n"
@@ -613,13 +618,18 @@ static void DrawGameDiff(void)
 Word ChooseGameDiff(void)
 {
 	Boolean Click = 0;
+	Boolean SkipScenario;
 	int oldmousex, oldmousey;
 	int i;
 	Word RetVal = FALSE;
 
 	PlaySound(SND_MENU);
+	SkipScenario = NextScenarioPath != NULL;
+	if (SkipScenario)
+		goto Choose;
+
 TryAgain:
-	if (!ChooseScenario()) {
+	if (SkipScenario || !ChooseScenario()) {
 		if (NextScenarioPath) {
 			SDL_free(NextScenarioPath);
 			NextScenarioPath = NULL;
@@ -645,6 +655,7 @@ TryIt:
 		return FALSE;
 	}
 
+Choose:
 	MenuScrollY = MenuPosY = difficulty;
 	ResizeGameWindow(369, 331);
 	ClearTheScreen(WHITE);
@@ -704,6 +715,7 @@ TryIt:
 		if (ScenarioPath)
 			SDL_free(ScenarioPath);
 		ScenarioPath = NextScenarioPath;
+		NextScenarioPath = NULL;
 		ClearFrameBuffer();
 		PresentScreen();
 		RetVal = MountMapFile(ScenarioPath);
@@ -721,15 +733,16 @@ static Boolean GetMouseEnabled(widget_t*_W,void*_D) { return MouseEnabled; }
 static Boolean GetSlowDown(widget_t*_W,void*_D) { return SlowDown; }
 static Boolean GetPaused(widget_t*_W,void*_D) { return TRUE; }
 
-static menu_t FileMenu = {"File", (widget_t[7]){
+static menu_t FileMenu = {"File", (widget_t[8]){
 	{&MenuItemClass, {20, 13, 36, 144}, &(menuitem_t){"New Game..."}},
-	{&MenuItemClass, {36, 13, 52, 144}, &(menuitem_t){"Open"}},
-	{&MenuSeparatorClass, {52, 13, 68, 144}},
-	{&MenuItemClass, {68, 13, 84, 144}, &(menuitem_t){"Save"}},
-	{&MenuItemClass, {84, 13, 100, 144}, &(menuitem_t){"Save As..."}},
-	{&MenuSeparatorClass, {100, 13, 116, 144}},
-	{&MenuItemClass, {116, 13, 132, 144}, &(menuitem_t){"Quit"}},
-}, 7, {19, 12, 133, 145}, -1};
+	{&MenuItemClass, {36, 13, 52, 144}, &(menuitem_t){"Load Scenario..."}},
+	{&MenuItemClass, {52, 13, 68, 144}, &(menuitem_t){"Open"}},
+	{&MenuSeparatorClass, {68, 13, 84, 144}},
+	{&MenuItemClass, {84, 13, 100, 144}, &(menuitem_t){"Save"}},
+	{&MenuItemClass, {100, 13, 116, 144}, &(menuitem_t){"Save As..."}},
+	{&MenuSeparatorClass, {116, 13, 132, 144}},
+	{&MenuItemClass, {132, 13, 148, 144}, &(menuitem_t){"Quit"}},
+}, 8, {19, 12, 149, 145}, -1};
 static menu_t OptionsMenu = {"Options", (widget_t[8]){
 	{&MenuItemClass, {20, 54, 36, 233}, &(menuitem_t){"Full Screen", GetFullScreen}},
 	{&MenuItemClass, {36, 54, 52, 233}, &(menuitem_t){"Sound", GetSoundEnabled}},
@@ -765,24 +778,32 @@ int DoMenuCommand(int Menu, int Item)
 			}
 			return -2;
 		case 1:
+			if (ChooseLoadScenario()) {
+				if (ChooseGameDiff()) {
+					return EX_NEWGAME;
+				}
+				return -2;
+			}
+			break;
+		case 2:
 			if (ChooseLoadGame()) {		/* Choose a game to load */
 				if (LoadGame()) {				/* Load the game into memory */
 					return EX_LOADGAME;	/* Restart a loaded game */
 				}
 			}
 			break;
-		case 3:
+		case 4:
 			if (!SaveFileName)			/* Save the file automatically? */
 				ChooseSaveGame();		/* Select a save game name */
 			if (SaveFileName)
 				SaveGame();				/* Save it */
 			break;
-		case 4:
+		case 5:
 			if (ChooseSaveGame()) {		/* Select a save game name */
 				SaveGame();				/* Save it */
 			}
 			break;
-		case 6:
+		case 7:
 			GoodBye();	/* Try to quit */
 			break;
 		}
@@ -1138,8 +1159,8 @@ exit_t PauseMenu(Boolean Shape)
 	Playing = playstate == EX_STILLPLAYING || playstate == EX_AUTOMAP;
 	if (Playing)
 		PauseSoundMusicSystem();
-	MENUITEM(&FileMenu.entries[3])->disabled = !Playing;
 	MENUITEM(&FileMenu.entries[4])->disabled = !Playing;
+	MENUITEM(&FileMenu.entries[5])->disabled = !Playing;
 	UngrabMouse();
 	ClearFrameBuffer();
 	if (Shape) {
