@@ -498,8 +498,11 @@ Word ChooseScenario(void)
 	ClearTheScreen(WHITE);
 	ClearFrameBuffer();
 	MenuBG = LoadPict(MainResources, 129);
-	DrawScenarioList();
-	ReadMenuJoystick();
+	for (i = 0; i < 2; i++) {	/* Workaround odd SDL behaviour on Windows */
+		WaitTick();
+		ReadMenuJoystick();
+		DrawScenarioList();
+	}
 	for (;;) {
 		if (!Click)
 			WaitTick();
